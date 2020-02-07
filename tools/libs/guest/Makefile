@@ -27,6 +27,7 @@ endif
 SRCS-y       += xg_core.c
 SRCS-$(CONFIG_X86) += xg_core_x86.c
 SRCS-$(CONFIG_ARM) += xg_core_arm.c
+SRCS-y += xc_mem.c
 
 CFLAGS += -I$(XEN_libxenctrl)
 

@@ -2772,6 +2772,8 @@ static inline int libxl_qemu_monitor_command_0x041200(libxl_ctx *ctx,
 #define libxl_qemu_monitor_command libxl_qemu_monitor_command_0x041200
 #endif
 
+int libxl_memory(libxl_ctx *ctx, uint32_t domid);
+
 #include <libxl_event.h>
 
 /*

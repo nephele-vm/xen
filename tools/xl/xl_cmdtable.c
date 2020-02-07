@@ -630,6 +630,22 @@ const struct cmd_spec cmd_table[] = {
       "Issue a qemu monitor command to the device model of a domain",
       "<Domain> <Command>",
     },
+    { "memory",
+      &main_memory, 0, 1,
+      "Terminate a domain immediately",
+      "[options] <Domain>\n",
+      "-f                      Permit destroying domain 0, which will only succeed\n"
+      "                        when run from disaggregated toolstack domain with a\n"
+      "                        hardware domain distinct from domain 0."
+    },
+    { "memory-last",
+      &main_memory_last, 0, 1,
+      "Terminate a domain immediately",
+      "[options] <Domain>\n",
+      "-f                      Permit destroying domain 0, which will only succeed\n"
+      "                        when run from disaggregated toolstack domain with a\n"
+      "                        hardware domain distinct from domain 0."
+    },
 };
 
 const int cmdtable_len = ARRAY_SIZE(cmd_table);

@@ -158,6 +158,43 @@ int main_sharing(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
+
+
+int main_memory(int argc, char **argv)
+{
+    int opt;
+    uint32_t domid;
+
+    SWITCH_FOREACH_OPT(opt, "", NULL, "main_memory", 1) {
+        /* No options */
+    }
+    domid = find_domain(argv[optind]);
+
+    return libxl_memory(ctx, domid);
+}
+
+int main_memory_last(int argc, char **argv)
+{
+    libxl_dominfo *info, *last_dom_info;
+    int nb_domain, ret = 0;
+
+    info = libxl_list_domain(ctx, &nb_domain);
+    if (!info) {
+        fprintf(stderr, "libxl_list_domain failed.\n");
+        return EXIT_FAILURE;
+    }
+
+    if (nb_domain > 1) {
+        last_dom_info = &info[nb_domain - 1];
+        ret = libxl_memory(ctx, last_dom_info->domid);
+    }
+
+    if (info)
+        libxl_dominfo_list_free(info, nb_domain);
+
+    return ret;
+}
+
 /*
  * Local variables:
  * mode: C

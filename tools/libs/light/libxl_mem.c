@@ -642,6 +642,13 @@ out:
     return rc;
 }
 
+extern int xc_memory(xc_interface *xch, domid_t domid, int make_ro);
+
+int libxl_memory(libxl_ctx *ctx, uint32_t domid)
+{
+    return xc_memory(ctx->xch, domid, 0);
+}
+
 /*
  * Local variables:
  * mode: C
