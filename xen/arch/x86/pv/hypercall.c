@@ -99,6 +99,7 @@ const pv_hypercall_table_t pv_hypercall_table[] = {
 #ifdef CONFIG_HYPFS
     HYPERCALL(hypfs_op),
 #endif
+    HYPERCALL(clone_op),
     HYPERCALL(mca),
 #ifndef CONFIG_PV_SHIM_EXCLUSIVE
     HYPERCALL(arch_1),

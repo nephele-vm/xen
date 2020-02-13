@@ -88,6 +88,11 @@ do_console_io(
     XEN_GUEST_HANDLE_PARAM(char) buffer);
 
 extern long
+do_clone_op(
+    unsigned int cmd,
+    XEN_GUEST_HANDLE_PARAM(void) arg);
+
+extern long
 do_grant_table_op(
     unsigned int cmd,
     XEN_GUEST_HANDLE_PARAM(void) uop,
