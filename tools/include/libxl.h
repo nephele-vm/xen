@@ -1628,6 +1628,9 @@ int libxl_domain_create_restore(libxl_ctx *ctx, libxl_domain_config *d_config,
                                 const libxl_asyncprogress_how *aop_console_how)
                                 LIBXL_EXTERNAL_CALLERS_ONLY;
 
+int libxl_domain_clone(libxl_ctx *ctx, uint32_t domid, uint32_t *child_domid) LIBXL_EXTERNAL_CALLERS_ONLY;
+int libxl_domain_clone_batch(libxl_ctx *ctx, uint32_t domid, uint32_t children_num, uint32_t *child_domids) LIBXL_EXTERNAL_CALLERS_ONLY;
+
 #if defined(LIBXL_API_VERSION) && LIBXL_API_VERSION < 0x040400
 
 static inline int libxl_domain_create_restore_0x040200(

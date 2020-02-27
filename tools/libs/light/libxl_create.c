@@ -871,6 +871,9 @@ retry_transaction:
     xs_write(ctx->xsh, t, GCSPRINTF("%s/uuid", vm_path), uuid_string, strlen(uuid_string));
     xs_write(ctx->xsh, t, GCSPRINTF("%s/name", vm_path), info->name, strlen(info->name));
 
+    if ( b_info->skip_cloning )
+        xs_write(ctx->xsh, t, GCSPRINTF("%s/skip_cloning", dom_path), b_info->skip_cloning, strlen(b_info->skip_cloning));
+
     libxl__xs_writev(gc, t, dom_path, info->xsdata);
     libxl__xs_writev(gc, t, GCSPRINTF("%s/platform", dom_path), info->platformdata);
 
@@ -2293,6 +2296,24 @@ int libxl_domain_create_restore(libxl_ctx *ctx, libxl_domain_config *d_config,
 
     return do_domain_create(ctx, d_config, domid, restore_fd, send_back_fd,
                             params, ao_how, aop_console_how);
+}
+
+int libxl_domain_clone(libxl_ctx *ctx, uint32_t domid, uint32_t *child_domid)
+{
+    int rc;
+
+    rc = xc_cloning_clone_single(ctx->xch, domid, child_domid);
+
+    return rc;
+}
+
+int libxl_domain_clone_batch(libxl_ctx *ctx, uint32_t domid, uint32_t children_num, uint32_t *child_domids)
+{
+    int rc;
+
+    rc = xc_cloning_clone_batch(ctx->xch, domid, children_num, child_domids);
+
+    return rc;
 }
 
 int libxl_domain_soft_reset(libxl_ctx *ctx,

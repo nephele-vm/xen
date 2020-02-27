@@ -2736,6 +2736,11 @@ skip_usbdev:
         }
     }
 
+    if (!xlu_cfg_get_long (config, "max_clones", &l, 0))
+        b_info->max_clones = l;
+    if (!xlu_cfg_get_string (config, "skip_cloning", &buf, 1))
+        b_info->skip_cloning = strdup(buf);
+
     parse_vkb_list(config, d_config);
 
     xlu_cfg_get_defbool(config, "xend_suspend_evtchn_compat",

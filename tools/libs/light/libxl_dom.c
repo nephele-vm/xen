@@ -463,6 +463,14 @@ int libxl__build_post(libxl__gc *gc, uint32_t domid,
         }
     }
 
+    if (info->max_clones) {
+        rc = xc_domain_cloning_enable(ctx->xch, domid, info->max_clones);
+        if (rc) {
+            LOG(ERROR, "Failed to enable cloning");
+            return rc;
+        }
+    }
+
     ents = libxl__calloc(gc, 12 + (info->max_vcpus * 2) + 2, sizeof(char *));
     ents[0] = "memory/static-max";
     ents[1] = GCSPRINTF("%"PRId64, info->max_memkb);
