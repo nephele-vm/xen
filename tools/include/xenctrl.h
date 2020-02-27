@@ -46,6 +46,7 @@
 #include <xen/xsm/flask_op.h>
 #include <xen/kexec.h>
 #include <xen/platform.h>
+#include <xen/clone.h>
 
 #include "xentoollog.h"
 
@@ -2681,6 +2682,21 @@ int xc_livepatch_replace(xc_interface *xch, char *name, uint32_t timeout, uint32
  */
 int xc_domain_cacheflush(xc_interface *xch, uint32_t domid,
                          xen_pfn_t start_pfn, xen_pfn_t nr_pfns);
+
+#define XC_CLONING_FLAG_USE_PAGE_SHARING_INFO_POOL 0x1
+
+int xc_cloning_enable(xc_interface *xch, void *notification_ring, int pages_num,
+        unsigned long flags);
+int xc_cloning_disable(xc_interface *xch);
+int xc_cloning_clone_single(xc_interface *xch, uint32_t domid, uint32_t *child_domid);
+int xc_cloning_clone_batch(xc_interface *xch, uint32_t domid, uint32_t children_num, uint32_t *children_domids);
+int xc_cloning_completion(xc_interface *xch, uint32_t id);
+int xc_cloning_cow(xc_interface *xch, uint32_t domid, void *addr, unsigned long *mfn);
+int xc_cloning_reset(xc_interface *xch, uint32_t domid);
+int xc_domain_cloning_enable(xc_interface *xch, uint32_t domid, uint32_t max_clones);
+int xc_domain_cloning_disable(xc_interface *xch, uint32_t domid);
+int xc_domain_fuzzing_enable(xc_interface *xch, uint32_t domid);
+int xc_domain_fuzzing_disable(xc_interface *xch, uint32_t domid);
 
 /* Compat shims */
 #include "xenctrl_compat.h"

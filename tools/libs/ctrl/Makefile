@@ -38,6 +38,7 @@ SRCS-$(CONFIG_MiniOS) += xc_minios.c
 SRCS-y       += xc_evtchn_compat.c
 SRCS-y       += xc_gnttab_compat.c
 SRCS-y       += xc_devicemodel_compat.c
+SRCS-y       += xc_clone.c
 
 CFLAGS   += -D__XEN_TOOLS__
 CFLAGS	+= $(PTHREAD_CFLAGS)
