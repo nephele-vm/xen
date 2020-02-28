@@ -1060,6 +1060,9 @@ long arch_do_domctl(
         ret = mem_sharing_domctl(d, &domctl->u.mem_sharing_op);
         break;
 #endif
+    case XEN_DOMCTL_cloning_op:
+        ret = cloning_domctl(d, &domctl->u.cloning_op);
+        break;
 
 #if P2M_AUDIT
     case XEN_DOMCTL_audit_p2m:

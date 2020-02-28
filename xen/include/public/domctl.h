@@ -876,6 +876,23 @@ struct xen_domctl_mem_sharing_op {
     } u;
 };
 
+/*
+ * Cloning operations
+ */
+/* XEN_DOMCTL_cloning_op. */
+#define XEN_DOMCTL_CLONING_ENABLE          0
+#define XEN_DOMCTL_CLONING_DISABLE         1
+#define XEN_DOMCTL_FUZZING_ENABLE          2
+#define XEN_DOMCTL_FUZZING_DISABLE         3
+
+struct xen_domctl_cloning_op {
+    uint8_t op; /* XEN_DOMCTL_CLONING_* */
+
+    union {
+        uint16_t max_clones;
+    } u;
+};
+
 struct xen_domctl_audit_p2m {
     /* OUT error counts */
     uint64_t orphans;
@@ -1253,6 +1270,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_get_cpu_policy                82
 #define XEN_DOMCTL_set_cpu_policy                83
 #define XEN_DOMCTL_vmtrace_op                    84
+#define XEN_DOMCTL_cloning_op                    85
 #define XEN_DOMCTL_gdbsx_guestmemio            1000
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
 #define XEN_DOMCTL_gdbsx_unpausevcpu           1002
@@ -1314,6 +1332,7 @@ struct xen_domctl {
         struct xen_domctl_psr_alloc         psr_alloc;
         struct xen_domctl_vuart_op          vuart_op;
         struct xen_domctl_vmtrace_op        vmtrace_op;
+        struct xen_domctl_cloning_op        cloning_op;
         uint8_t                             pad[128];
     } u;
 };
