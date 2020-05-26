@@ -1727,8 +1727,12 @@ static void domcreate_launch_dm(libxl__egc *egc, libxl__multidev *multidev,
     case LIBXL_DOMAIN_TYPE_PV:
     case LIBXL_DOMAIN_TYPE_PVH:
     {
-        libxl__device_console console, vuart;
+#define MY_XEN_CONSOLE 1
+#if MY_XEN_CONSOLE
+        libxl__device_console console;
         libxl__device device;
+#endif
+        libxl__device_console vuart;
 
         for (i = 0; i < d_config->num_vfbs; i++) {
             libxl__device_add(gc, domid, &libxl__vfb_devtype,
@@ -1747,10 +1751,12 @@ static void domcreate_launch_dm(libxl__egc *egc, libxl__multidev *multidev,
             libxl__device_console_dispose(&vuart);
         }
 
+#if MY_XEN_CONSOLE
         init_console_info(gc, &console, 0);
         console.backend_domid = state->console_domid;
         libxl__device_console_add(gc, domid, &console, state, &device);
         libxl__device_console_dispose(&console);
+#endif
 
         ret = libxl__need_xenpv_qemu(gc, d_config);
         if (ret < 0)

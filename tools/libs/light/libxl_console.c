@@ -337,6 +337,8 @@ int libxl__device_console_add(libxl__gc *gc, uint32_t domid,
         flexarray_append(front, "protocol");
         flexarray_append(front, LIBXL_XENCONSOLE_PROTOCOL);
     }
+    flexarray_append(front, "enabled");
+    flexarray_append(front, "enabled");
     libxl__device_generic_add(gc, XBT_NULL, device,
                               libxl__xs_kvs_of_flexarray(gc, back),
                               libxl__xs_kvs_of_flexarray(gc, front),
