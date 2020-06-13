@@ -43,7 +43,11 @@ indexFor(unsigned int tablelength, unsigned int hashvalue)
 */
 
 /*****************************************************************************/
+#if HASHTABLE_DONT_FREE_KEY
+#define freekey(X)
+#else
 #define freekey(X) free(X)
+#endif
 /*define freekey(X) ; */
 
 
