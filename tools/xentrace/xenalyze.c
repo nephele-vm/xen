@@ -1753,7 +1753,8 @@ enum {
     TOPLEVEL_PV,
     TOPLEVEL_SHADOW,
     TOPLEVEL_HW,
-    TOPLEVEL_MAX=TOPLEVEL_HW+1,
+    TOPLEVEL_CLONE,
+    TOPLEVEL_MAX,
 };
 
 const char * toplevel_name[TOPLEVEL_MAX] = {
@@ -1765,6 +1766,7 @@ const char * toplevel_name[TOPLEVEL_MAX] = {
     [TOPLEVEL_PV]="pv",
     [TOPLEVEL_SHADOW]="shadow",
     [TOPLEVEL_HW]="hw",
+    [TOPLEVEL_CLONE]="clone",
 };
 
 struct trace_volume {
@@ -1932,10 +1934,14 @@ void cpumask_union(cpu_mask_t *d, const cpu_mask_t *s) {
 
 /* -- Time code -- */
 
-void cycles_to_time(unsigned long long c, struct time_struct *t) {
-    t->time = ((c - P.f.first_tsc) << 10) / opt.cpu_qhz;
+void time_to_struct(struct time_struct *t) {
     t->s = t->time / 1000000000;
     t->ns = t->time - (t->s * 1000000000);
+}
+
+void cycles_to_time(unsigned long long c, struct time_struct *t) {
+    t->time = ((c - P.f.first_tsc) << 10) / opt.cpu_qhz;
+    time_to_struct(t);
 }
 
 void abs_cycles_to_time(unsigned long long ac, struct time_struct *t) {
@@ -1944,8 +1950,7 @@ void abs_cycles_to_time(unsigned long long ac, struct time_struct *t) {
         /* t->s = t->time / 1000000000;                         */
         /* t->ns = t->time % 1000000000; */
         t->time = ((ac - P.f.first_tsc) << 10) / opt.cpu_qhz;
-        t->s = t->time / 1000000000;
-        t->ns = t->time - (t->s * 1000000000);
+        time_to_struct(t);
     } else {
         t->time = t->s = t->ns = 0;
     }
@@ -8626,6 +8631,80 @@ void dom0_process(struct pcpu_info *p)
     }
 }
 
+#define TRC_CLONE_SUB_BREAKDOWN        0x1
+
+#define TRC_CLONE_MIN_OP               (TRC_CLONE_OP - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_OP_ALL           (TRC_CLONE_OP_ALL - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_DOMAIN_COPY      (TRC_CLONE_DOMAIN_COPY - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_ALLOC_PHYSMAP    (TRC_CLONE_ALLOC_PHYSMAP - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_P2M              (TRC_CLONE_P2M - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_PAGETABLE        (TRC_CLONE_PAGETABLE - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_COW              (TRC_CLONE_COW - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_CUSTOM_1         (TRC_CLONE_CUSTOM_1 - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_CUSTOM_2         (TRC_CLONE_CUSTOM_2 - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_CUSTOM_3         (TRC_CLONE_CUSTOM_3 - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_CUSTOM_4         (TRC_CLONE_CUSTOM_4 - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_CUSTOM_5         (TRC_CLONE_CUSTOM_5 - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_CUSTOM_6         (TRC_CLONE_CUSTOM_6 - TRC_CLONE_BREAKDOWN)
+#define TRC_CLONE_MIN_MAX              (TRC_CLONE_MIN_CUSTOM_6 + 1)
+
+char *trc_clone_sub_name[] = {
+    [TRC_CLONE_MIN_OP]="op",
+    [TRC_CLONE_MIN_OP_ALL]="op_all",
+    [TRC_CLONE_MIN_DOMAIN_COPY]="domain_copy",
+    [TRC_CLONE_MIN_ALLOC_PHYSMAP]="alloc_physmap",
+    [TRC_CLONE_MIN_P2M]="p2m",
+    [TRC_CLONE_MIN_PAGETABLE]="pagetable",
+    [TRC_CLONE_MIN_COW]="cow",
+    [TRC_CLONE_MIN_CUSTOM_1]="custom_1",
+    [TRC_CLONE_MIN_CUSTOM_2]="custom_2",
+    [TRC_CLONE_MIN_CUSTOM_3]="custom_3",
+    [TRC_CLONE_MIN_CUSTOM_4]="custom_4",
+    [TRC_CLONE_MIN_CUSTOM_5]="custom_5",
+    [TRC_CLONE_MIN_CUSTOM_6]="custom_6",
+};
+
+struct clone_measurement {
+    struct time_struct start;
+    struct time_struct end;
+    struct time_struct duration;
+};
+struct clone_measurement meas[TRC_CLONE_MIN_MAX];
+
+void clone_process(struct pcpu_info *p)
+{
+    struct record_info *ri = &p->ri;
+
+    switch(ri->evt.sub)
+    {
+    case TRC_CLONE_SUB_BREAKDOWN: {
+        struct {
+            unsigned int start;
+        } *r = (typeof(r))ri->d;
+
+        if (r->start)
+            meas[ri->evt.minor].start = ri->t;
+
+        else {
+            meas[ri->evt.minor].end = ri->t;
+
+            meas[ri->evt.minor].duration.time =
+                meas[ri->evt.minor].end.time - meas[ri->evt.minor].start.time;
+            time_to_struct(&meas[ri->evt.minor].duration);
+
+            printf("CLONE %u.%09u %12s domain\n",
+                    meas[ri->evt.minor].duration.s, meas[ri->evt.minor].duration.ns,
+                    trc_clone_sub_name[ri->evt.minor]
+                   /*r->domid,*/
+                   );
+        }
+        break;
+    }
+    default:
+        process_generic(&p->ri);
+    }
+}
+
 /* ---- Base ----- */
 void dump_generic(FILE * f, struct record_info *ri)
 {
@@ -9463,6 +9542,9 @@ void process_record(struct pcpu_info *p) {
             break;
         case TRC_DOM0OP_MAIN:
             dom0_process(p);
+            break;
+        case TRC_CLONE_MAIN:
+            clone_process(p);
             break;
         default:
             process_generic(ri);
@@ -10858,8 +10940,10 @@ int main(int argc, char *argv[]) {
     if (G.symbol_file != NULL)
         parse_symbol_file(G.symbol_file);
 
+#if 0
     if(opt.dump_all)
         warn = stdout;
+#endif
 
     init_pcpus();
 
