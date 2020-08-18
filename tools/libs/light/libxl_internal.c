@@ -42,6 +42,7 @@ void libxl__alloc_failed(libxl_ctx *ctx, const char *func,
 #undef M
 }
 
+__noinstrument
 void libxl__ptr_add(libxl__gc *gc, void *ptr)
 {
     int i;
@@ -73,6 +74,7 @@ void libxl__ptr_add(libxl__gc *gc, void *ptr)
     return;
 }
 
+__noinstrument
 void libxl__free_all(libxl__gc *gc)
 {
     void *ptr;
@@ -90,6 +92,7 @@ void libxl__free_all(libxl__gc *gc)
     gc->alloc_maxsize = 0;
 }
 
+__noinstrument
 void *libxl__malloc(libxl__gc *gc, size_t size)
 {
     void *ptr = malloc(size);
@@ -99,6 +102,7 @@ void *libxl__malloc(libxl__gc *gc, size_t size)
     return ptr;
 }
 
+__noinstrument
 void *libxl__zalloc(libxl__gc *gc, size_t size)
 {
     void *ptr = calloc(size, 1);
@@ -108,6 +112,7 @@ void *libxl__zalloc(libxl__gc *gc, size_t size)
     return ptr;
 }
 
+__noinstrument
 void *libxl__calloc(libxl__gc *gc, size_t nmemb, size_t size)
 {
     void *ptr = calloc(nmemb, size);
@@ -117,6 +122,7 @@ void *libxl__calloc(libxl__gc *gc, size_t nmemb, size_t size)
     return ptr;
 }
 
+__noinstrument
 void *libxl__realloc(libxl__gc *gc, void *ptr, size_t new_size)
 {
     void *new_ptr = realloc(ptr, new_size);
@@ -140,6 +146,7 @@ void *libxl__realloc(libxl__gc *gc, void *ptr, size_t new_size)
     return new_ptr;
 }
 
+__noinstrument
 char *libxl__vsprintf(libxl__gc *gc, const char *fmt, va_list ap)
 {
     char *s;
@@ -160,6 +167,7 @@ char *libxl__vsprintf(libxl__gc *gc, const char *fmt, va_list ap)
     return s;
 }
 
+__noinstrument
 char *libxl__sprintf(libxl__gc *gc, const char *fmt, ...)
 {
     char *s;
@@ -172,6 +180,7 @@ char *libxl__sprintf(libxl__gc *gc, const char *fmt, ...)
     return s;
 }
 
+__noinstrument
 char *libxl__strdup(libxl__gc *gc, const char *c)
 {
     char *s;
@@ -212,6 +221,7 @@ char *libxl__dirname(libxl__gc *gc, const char *s)
     return libxl__strndup(gc, s, c - s);
 }
 
+__noinstrument
 void libxl__logv(libxl_ctx *ctx, xentoollog_level msglevel, int errnoval,
              const char *file, int line, const char *func,
              uint32_t domid, const char *fmt, va_list ap)
@@ -246,6 +256,7 @@ void libxl__logv(libxl_ctx *ctx, xentoollog_level msglevel, int errnoval,
     errno = esave;
 }
 
+__noinstrument
 void libxl__log(libxl_ctx *ctx, xentoollog_level msglevel, int errnoval,
             const char *file, int line, const char *func,
             uint32_t domid, const char *fmt, ...)

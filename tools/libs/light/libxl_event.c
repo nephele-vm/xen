@@ -1619,6 +1619,7 @@ static void egc_run_callbacks(libxl__egc *egc)
     }
 }
 
+__noinstrument
 void libxl__egc_cleanup_2_ul_cb_gc(libxl__egc *egc)
 {
     EGC_GC;

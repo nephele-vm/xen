@@ -92,6 +92,8 @@
 #include "_libxl_types_internal.h"
 #include "_libxl_types_internal_json.h"
 
+#include "profile.h"
+
 #define LIBXL_INIT_TIMEOUT 10
 #define LIBXL_DESTROY_TIMEOUT 10
 #define LIBXL_HOTPLUG_TIMEOUT 40
@@ -828,6 +830,9 @@ struct libxl__ao {
     uint32_t domid;
     LIBXL_TAILQ_ENTRY(libxl__ao) entry_for_callback;
     int outstanding_killed_child;
+#if LIB_PROFILING
+    struct profile profile_ts;
+#endif
 };
 
 #define LIBXL_INIT_GC(gc,ctx) do{               \
@@ -837,11 +842,13 @@ struct libxl__ao {
     } while(0)
     /* NB, also, a gc struct ctx->nogc_gc is initialised in libxl_ctx_alloc */
 
+__noinstrument
 static inline libxl_ctx *libxl__gc_owner(libxl__gc *gc)
 {
     return gc->owner;
 }
 
+__noinstrument
 static inline int libxl__gc_is_real(const libxl__gc *gc)
 {
     return gc->alloc_maxsize >= 0;
@@ -4413,11 +4420,13 @@ _hidden char *libxl__domid_history_path(libxl__gc *gc,
 
 /* Locking functions.  See comment for "lock" member of libxl__ctx. */
 
+__noinstrument
 static inline void libxl__ctx_lock(libxl_ctx *ctx) {
     int r = pthread_mutex_lock(&ctx->lock);
     assert(!r);
 }
 
+__noinstrument
 static inline void libxl__ctx_unlock(libxl_ctx *ctx) {
     int r = pthread_mutex_unlock(&ctx->lock);
     assert(!r);
@@ -4681,6 +4690,7 @@ static inline int libxl__hwcap_is_default(libxl_hwcap *hwcap)
     return 0;
 }
 
+__noinstrument
 static inline int libxl__string_list_is_empty(libxl_string_list *psl)
 {
     return !libxl_string_list_length(psl);
@@ -4827,6 +4837,7 @@ static inline bool libxl__timer_mode_is_default(libxl_timer_mode *tm)
     return *tm == LIBXL_TIMER_MODE_DEFAULT;
 }
 
+__noinstrument
 static inline bool libxl__string_is_default(char **s)
 {
     return *s == NULL;

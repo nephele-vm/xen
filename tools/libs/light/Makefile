@@ -124,6 +124,24 @@ ifeq ($(debug),y)
 CFLAGS_LIBXL += -DCONFIG_DEBUG
 endif
 
+PROFILING_DIR=$(CURDIR)/../../profiling
+CFLAGS_LIBXL += -I$(PROFILING_DIR)
+ifeq ($(CONFIG_LIBXL_INSTRUMENT_FUNCTIONS),y)
+CFLAGS_LIBXL += -finstrument-functions
+CFLAGS_LIBXL += -I$(XEN_ROOT)/tools/xenstore
+CFLAGS_LIBXL += -DLIB_PROFILING=1
+CFLAGS_LIBXL += -DPROFILE_TRIGGER_INIT_VALUE=1
+CFLAGS_LIBXL += -DINSTRUMENTED_LIB_PATH=\"/root/dist/xen/lib/libxenlight.so.4.16\"
+SRCS-y += $(PROFILING_DIR)/trace_func.c
+SRCS-y += $(PROFILING_DIR)/trace_func_hash.c
+SRCS-y += hashtable.c
+
+#hashtable.o: $(XEN_ROOT)/tools/xenstore/hashtable.c
+#	$(CC) $(CFLAGS) -c -o $@ $<
+
+endif
+
+
 CFLAGS += $(PTHREAD_CFLAGS)
 LDFLAGS += $(PTHREAD_LDFLAGS)
 

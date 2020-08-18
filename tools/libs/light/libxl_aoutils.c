@@ -553,6 +553,9 @@ static void async_exec_done(libxl__egc *egc,
     libxl__async_exec_state *aes = CONTAINER_OF(child, *aes, child);
     STATE_AO_GC(aes->ao);
 
+    profile_stop(&aes->ao->profile_ts);
+    PROFILE_PRINT_MSEC(&aes->ao->profile_ts, ";ovs");
+
     libxl__ev_time_deregister(gc, &aes->time);
 
     if (status) {
@@ -591,6 +594,7 @@ int libxl__async_exec_start(libxl__async_exec_state *aes)
     }
 
     LOG(DEBUG, "forking to execute: %s ", aes->what);
+    profile_start(&ao->profile_ts);
 
     /* Fork and exec */
     pid = libxl__ev_child_fork(gc, child, async_exec_done);

@@ -200,6 +200,7 @@ int libxl_ctx_free(libxl_ctx *ctx)
     return 0;
 }
 
+__noinstrument
 void libxl_string_list_dispose(libxl_string_list *psl)
 {
     int i;
@@ -216,6 +217,7 @@ void libxl_string_list_dispose(libxl_string_list *psl)
     *psl = NULL;
 }
 
+__noinstrument
 void libxl_string_list_copy(libxl_ctx *ctx,
                             libxl_string_list *dst,
                             const libxl_string_list *src)
@@ -239,6 +241,7 @@ out:
     GC_FREE;
 }
 
+__noinstrument
 int libxl_string_list_length(const libxl_string_list *psl)
 {
     int i = 0;
@@ -311,21 +314,25 @@ out:
     GC_FREE;
 }
 
+__noinstrument
 void libxl_defbool_set(libxl_defbool *db, bool b)
 {
     db->val = b ? LIBXL__DEFBOOL_TRUE : LIBXL__DEFBOOL_FALSE;
 }
 
+__noinstrument
 void libxl_defbool_unset(libxl_defbool *db)
 {
     db->val = LIBXL__DEFBOOL_DEFAULT;
 }
 
+__noinstrument
 bool libxl_defbool_is_default(libxl_defbool db)
 {
     return !db.val;
 }
 
+__noinstrument
 void libxl_defbool_setdefault(libxl_defbool *db, bool b)
 {
     if (libxl_defbool_is_default(*db))

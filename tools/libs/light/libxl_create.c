@@ -2270,14 +2270,22 @@ static void unset_disk_colo_restore(libxl_domain_config *d_config)
         libxl_defbool_set(&d_config->disks[i].colo_restore_enable, false);
 }
 
+int libxl_domain_create_new_profile_trigger = 0;
+
 int libxl_domain_create_new(libxl_ctx *ctx, libxl_domain_config *d_config,
                             uint32_t *domid,
                             const libxl_asyncop_how *ao_how,
                             const libxl_asyncprogress_how *aop_console_how)
 {
+    int rc;
+
+    libxl_domain_create_new_profile_trigger = 1;
     unset_disk_colo_restore(d_config);
-    return do_domain_create(ctx, d_config, domid, -1, -1, NULL,
+    rc = do_domain_create(ctx, d_config, domid, -1, -1, NULL,
                             ao_how, aop_console_how);
+    libxl_domain_create_new_profile_trigger = 0;
+
+    return rc;
 }
 
 int libxl_domain_create_restore(libxl_ctx *ctx, libxl_domain_config *d_config,

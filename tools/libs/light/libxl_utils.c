@@ -653,6 +653,7 @@ void libxl__bitmap_copy_best_effort(libxl__gc *gc, libxl_bitmap *dptr,
     memcpy(dptr->map, sptr->map, sz * sizeof(*dptr->map));
 }
 
+__noinstrument
 void libxl_bitmap_copy_alloc(libxl_ctx *ctx,
                              libxl_bitmap *dptr,
                              const libxl_bitmap *sptr)
@@ -1209,6 +1210,7 @@ int libxl_domid_valid_guest(uint32_t domid)
     return domid > 0 && domid < DOMID_FIRST_RESERVED;
 }
 
+__noinstrument
 void libxl_string_copy(libxl_ctx *ctx, char **dst, char * const*src)
 {
     GC_INIT(ctx);
