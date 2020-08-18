@@ -39,6 +39,7 @@
 #define TRC_PV       0x0020f000    /* Xen PV traces            */
 #define TRC_SHADOW   0x0040f000    /* Xen shadow tracing       */
 #define TRC_HW       0x0080f000    /* Xen hardware-related traces */
+#define TRC_CLONE    0x0100f000    /* Xen clone traces */
 #define TRC_GUEST    0x0800f000    /* Guest-generated traces   */
 #define TRC_ALL      0x0ffff000
 #define TRC_HD_TO_EVENT(x) ((x)&0x0fffffff)
@@ -274,6 +275,23 @@
 #define TRC_HW_IRQ_ASSIGN_VECTOR      (TRC_HW_IRQ + 0x6)
 #define TRC_HW_IRQ_UNMAPPED_VECTOR    (TRC_HW_IRQ + 0x7)
 #define TRC_HW_IRQ_HANDLED            (TRC_HW_IRQ + 0x8)
+
+/* Trace events for cloning */
+#define TRC_CLONE_BREAKDOWN           0x01001000 /* TODO */
+
+#define TRC_CLONE_OP                  (TRC_CLONE_BREAKDOWN + 0x1)
+#define TRC_CLONE_OP_ALL              (TRC_CLONE_BREAKDOWN + 0x2)
+#define TRC_CLONE_DOMAIN_COPY         (TRC_CLONE_BREAKDOWN + 0x3)
+#define TRC_CLONE_ALLOC_PHYSMAP       (TRC_CLONE_BREAKDOWN + 0x4)
+#define TRC_CLONE_P2M                 (TRC_CLONE_BREAKDOWN + 0x5)
+#define TRC_CLONE_PAGETABLE           (TRC_CLONE_BREAKDOWN + 0x6)
+#define TRC_CLONE_COW                 (TRC_CLONE_BREAKDOWN + 0x7)
+#define TRC_CLONE_CUSTOM_1            (TRC_CLONE_BREAKDOWN + 0x8)
+#define TRC_CLONE_CUSTOM_2            (TRC_CLONE_BREAKDOWN + 0x9)
+#define TRC_CLONE_CUSTOM_3            (TRC_CLONE_BREAKDOWN + 0xa)
+#define TRC_CLONE_CUSTOM_4            (TRC_CLONE_BREAKDOWN + 0xb)
+#define TRC_CLONE_CUSTOM_5            (TRC_CLONE_BREAKDOWN + 0xc)
+#define TRC_CLONE_CUSTOM_6            (TRC_CLONE_BREAKDOWN + 0xd)
 
 /*
  * Event Flags
