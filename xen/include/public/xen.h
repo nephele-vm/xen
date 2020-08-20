@@ -192,6 +192,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define VIRQ_ARGO       11 /* G. Argo interdomain message notification       */
 #define VIRQ_ENOMEM     12 /* G. (DOM0) Low on heap memory       */
 #define VIRQ_XENPMU     13 /* V.  PMC interrupt                              */
+#define VIRQ_CLONED     14 /* G. (DOM0) Cloned                               */
 
 /* Architecture-specific VIRQ definitions. */
 #define VIRQ_ARCH_0    16
@@ -612,6 +613,9 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
 
 /* DOMID_INVALID is used to identify pages with unknown owner. */
 #define DOMID_INVALID        xen_mk_uint(0x7FF4)
+
+/* Wildcard for any child domain. */
+#define DOMID_CHILD          xen_mk_uint(0x7FF5)
 
 /* Idle domain. */
 #define DOMID_IDLE           xen_mk_uint(0x7FFF)
