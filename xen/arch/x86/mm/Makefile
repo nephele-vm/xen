@@ -9,6 +9,7 @@ obj-$(CONFIG_MEM_PAGING) += mem_paging.o
 obj-$(CONFIG_MEM_SHARING) += mem_sharing.o
 obj-y += p2m.o
 obj-$(CONFIG_HVM) += p2m-ept.o p2m-pod.o p2m-pt.o
+obj-y += p2m-pv.o
 obj-y += paging.o
 obj-$(CONFIG_DEBUG) += dump_mem.o
 
