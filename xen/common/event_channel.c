@@ -284,6 +284,23 @@ void evtchn_free(struct domain *d, struct evtchn *chn)
     xsm_evtchn_close_post(chn);
 }
 
+static int evtchn_set_unbound_locked(struct domain *d, struct evtchn *chn, domid_t remote_dom)
+{
+    int rc = 0;
+
+    evtchn_write_lock(chn);
+
+    chn->state = ECS_UNBOUND;
+    if ( (chn->u.unbound.remote_domid = remote_dom) == DOMID_SELF )
+        chn->u.unbound.remote_domid = current->domain->domain_id;
+    evtchn_port_init(d, chn);
+
+    evtchn_write_unlock(chn);
+
+//TODO out:
+    return rc;
+}
+
 static int evtchn_alloc_unbound(evtchn_alloc_unbound_t *alloc)
 {
     struct evtchn *chn;
@@ -301,18 +318,13 @@ static int evtchn_alloc_unbound(evtchn_alloc_unbound_t *alloc)
         ERROR_EXIT_DOM(port, d);
     chn = evtchn_from_port(d, port);
 
-    rc = xsm_evtchn_unbound(XSM_TARGET, d, chn, alloc->remote_dom);
+    rc = xsm_evtchn_unbound(XSM_TARGET, d, chn, alloc->remote_dom);//TODO use it when cloning
     if ( rc )
         goto out;
 
-    evtchn_write_lock(chn);
-
-    chn->state = ECS_UNBOUND;
-    if ( (chn->u.unbound.remote_domid = alloc->remote_dom) == DOMID_SELF )
-        chn->u.unbound.remote_domid = current->domain->domain_id;
-    evtchn_port_init(d, chn);
-
-    evtchn_write_unlock(chn);
+    rc = evtchn_set_unbound_locked(d, chn, alloc->remote_dom);
+    if ( rc )
+        goto out;
 
     alloc->port = port;
 
@@ -339,6 +351,25 @@ static void double_evtchn_unlock(struct evtchn *lchn, struct evtchn *rchn)
 {
     evtchn_write_unlock(lchn);
     evtchn_write_unlock(rchn);
+}
+
+static void evtchn_bind(struct domain *ld, struct evtchn *lchn, int lport,
+                        struct domain *rd, struct evtchn *rchn, int rport)
+{
+    lchn->u.interdomain.remote_dom  = rd;
+    lchn->u.interdomain.remote_port = rport;
+    lchn->state                     = ECS_INTERDOMAIN;
+    evtchn_port_init(ld, lchn);
+
+    rchn->u.interdomain.remote_dom  = ld;
+    rchn->u.interdomain.remote_port = lport;
+    rchn->state                     = ECS_INTERDOMAIN;
+
+    /*
+     * We may have lost notifications on the remote unbound port. Fix that up
+     * here by conservatively always setting a notification on the local port.
+     */
+    evtchn_port_set_pending(ld, lchn->notify_vcpu_id, lchn);
 }
 
 static int evtchn_bind_interdomain(evtchn_bind_interdomain_t *bind)
@@ -382,20 +413,7 @@ static int evtchn_bind_interdomain(evtchn_bind_interdomain_t *bind)
 
     double_evtchn_lock(lchn, rchn);
 
-    lchn->u.interdomain.remote_dom  = rd;
-    lchn->u.interdomain.remote_port = rport;
-    lchn->state                     = ECS_INTERDOMAIN;
-    evtchn_port_init(ld, lchn);
-    
-    rchn->u.interdomain.remote_dom  = ld;
-    rchn->u.interdomain.remote_port = lport;
-    rchn->state                     = ECS_INTERDOMAIN;
-
-    /*
-     * We may have lost notifications on the remote unbound port. Fix that up
-     * here by conservatively always setting a notification on the local port.
-     */
-    evtchn_port_set_pending(ld, lchn->notify_vcpu_id, lchn);
+    evtchn_bind(ld, lchn, lport, rd, rchn, rport);
 
     double_evtchn_unlock(lchn, rchn);
 
@@ -1538,6 +1556,83 @@ void evtchn_destroy_final(struct domain *d)
     xfree(d->poll_mask);
     d->poll_mask = NULL;
 #endif
+}
+
+long evtchn_clone(struct domain *s, struct domain *d)
+{
+    int port, virq = 0;
+    struct evtchn *schn, *dchn;
+    struct vcpu   *v;
+    long rc = -1;
+
+    rcu_lock_domain(s);
+    spin_lock(&s->event_lock);
+
+    for ( port = 1; port < s->valid_evtchns; port++ )
+    {
+        schn = evtchn_from_port(s, port);
+        evtchn_read_lock(schn);
+
+        if (schn->state == ECS_FREE)
+            goto out_iter_unlock;
+
+        rc = evtchn_allocate_port(d, port);
+        BUG_ON(rc != 0);
+
+        dchn = evtchn_from_port(d, port);
+
+        switch ( schn->state )
+        {
+        case ECS_UNBOUND: {
+            if (schn->u.unbound.remote_domid == DOMID_CHILD)
+                evtchn_bind(d, dchn, port, s, schn, port);
+            else
+                rc = evtchn_set_unbound_locked(d, dchn,
+                        schn->u.unbound.remote_domid);
+            if ( rc )
+                goto out_iter_unlock;
+            break;
+        }
+        case ECS_INTERDOMAIN: {
+            rc = evtchn_set_unbound_locked(d, dchn,
+                    schn->u.interdomain.remote_dom->domain_id);
+            if ( rc )
+                goto out_iter_unlock;
+
+            break;
+        }
+        case ECS_VIRQ: {
+            //TODO refactor into one function
+            dchn->state          = ECS_VIRQ;
+            dchn->notify_vcpu_id = schn->notify_vcpu_id;
+            dchn->u.virq         = virq;
+            evtchn_port_init(d, dchn);
+
+            //TODO ??? spin_unlock(&chn->lock);
+
+            if ( (v = domain_vcpu(d, schn->notify_vcpu_id)) == NULL )
+                return -ENOENT;
+            v->virq_to_evtchn[virq] = port;
+
+            virq++;
+
+            break;
+        }
+        //TODO ECS_RESERVED
+        //TODO ECS_PIRQ, , ECS_IPI
+        default:
+            break;
+        }
+
+out_iter_unlock:
+        evtchn_read_unlock(schn);
+    }
+
+//out:
+    spin_unlock(&s->event_lock);
+    rcu_unlock_domain(s);
+
+    return rc;
 }
 
 
