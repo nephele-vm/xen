@@ -42,6 +42,7 @@
 #include <xsm/xsm.h>
 #include <asm/flushtlb.h>
 #include <asm/guest_atomics.h>
+#include <asm/pv/p2m.h>
 
 /* Per-domain grant information. */
 struct grant_table {
@@ -1845,10 +1846,12 @@ gnttab_grow_table(struct domain *d, unsigned int req_nr_frames)
         req_nr_frames = INITIAL_NR_GRANT_FRAMES;
     ASSERT(req_nr_frames <= gt->max_grant_frames);
 
+#if 0
     if ( req_nr_frames > INITIAL_NR_GRANT_FRAMES )
         gdprintk(XENLOG_INFO,
                  "Expanding d%d grant table from %u to %u frames\n",
                  d->domain_id, nr_grant_frames(gt), req_nr_frames);
+#endif
 
     /* Active */
     for ( i = nr_active_grant_frames(gt);
@@ -1980,6 +1983,227 @@ int grant_table_init(struct domain *d, int max_grant_frames,
         grant_table_destroy(d);
 
     return ret;
+}
+
+int grant_table_init2(struct domain *d, struct domain *s)//TODO this is not quite copy
+{
+	int err;
+    struct grant_table *sgt;
+
+    sgt = s->grant_table;
+    if ( (err = grant_table_init(d, sgt->max_grant_frames,
+                                    sgt->max_maptrack_frames)) != 0 )
+		goto fail;
+
+	err = gnttab_grow_table(d, nr_grant_frames(sgt));
+
+fail:
+	return err;
+}
+
+int grant_table_entries_num_for_cloning(struct domain *d)
+{
+    grant_ref_t ref;
+    struct grant_table *gt;
+    unsigned int nr_ents;
+    int count = 0;
+
+    gt = d->grant_table;
+    grant_read_lock(gt);
+
+    nr_ents = nr_grant_entries(gt);
+    for ( ref = 0; ref != nr_ents; ref++ )
+    {
+#if DO_ACT_LOCKING
+        struct active_grant_entry *act;
+#endif
+        struct grant_entry_header *shah;
+
+#if DO_ACT_LOCKING
+        act = active_entry_acquire(gt, ref);
+#endif
+        shah = shared_entry_header(gt, ref);
+        /* We do not clone grants for memory shared with children */
+        if ( shah->flags && shah->domid != DOMID_CHILD )
+            count++;
+#if DO_ACT_LOCKING
+        active_entry_release(act);
+#endif
+    }
+
+    grant_read_unlock(gt);
+
+    return count;
+}
+
+int grant_table_clone(struct domain *d, struct domain *s,
+        struct domain_clone_helper *dch)
+{
+    grant_ref_t ref;
+    struct grant_table *sgt, *dgt;
+    unsigned int nr_ents;
+    int rc = 0;
+
+    sgt = s->grant_table;
+    dgt = d->grant_table;
+
+    grant_read_lock(sgt);
+    grant_read_lock(dgt); /* TODO necessary? */
+
+    BUG_ON(nr_grant_frames(sgt) != nr_grant_frames(dgt));
+
+    nr_ents = nr_grant_entries(sgt);
+    for ( ref = 0; ref != nr_ents; ref++ )
+    {
+        struct active_grant_entry *sact, *dact;
+        struct grant_entry_header *sshah, *dshah;
+        unsigned long smfn, dmfn, gpfn;
+
+        sshah = shared_entry_header(sgt, ref);
+        if ( !sshah->flags )
+            continue;
+
+#if DO_ACT_LOCKING
+        sact = active_entry_acquire(sgt, ref);
+        dact = active_entry_acquire(dgt, ref);
+#else
+        sact = &_active_entry(sgt, ref);
+        dact = &_active_entry(dgt, ref);
+#endif
+        dact->pin = sact->pin;
+        dact->domid = sact->domid;
+        dact->start = sact->start;
+        dact->is_sub_page = sact->is_sub_page;
+        dact->length = sact->length;
+        dact->trans_gref = sact->trans_gref;
+        dact->trans_domain = d;
+
+        dshah = shared_entry_header(dgt, ref);
+
+        if ( sgt->gt_version == 1 )
+        {
+            struct grant_entry_v1 *sge_v1, *dge_v1;
+
+            sge_v1 = &shared_entry_v1(sgt, ref);
+            smfn = sge_v1->frame;
+
+#if CLONE_SHARE_SHARED_PAGES
+            gpfn = get_gpfn_from_mfn(smfn);
+            rc = p2m_fll_get_entry(d, gpfn, &dmfn);
+            BUG_ON((rc != 0);
+#else
+            if ( smfn == dch->parent.xenstore_mfn )
+                /* Xenstore mfn was already allocated */
+                dmfn = dch->child.xenstore_mfn;
+
+            else if ( smfn == dch->parent.console_mfn )
+                /* Console mfn was already allocated */
+                dmfn = dch->child.console_mfn;
+
+            else if ( sge_v1->domid == DOMID_CHILD )
+            {
+                /* interdomain shared page: same mfn */
+                gpfn = get_gpfn_from_mfn(smfn);
+                ASSERT(gpfn != INVALID_M2P_ENTRY);
+                rc = p2m_fll_set_entry(d, gpfn, smfn);
+                ASSERT(rc == 0);
+                set_bit(gpfn, dch->pfns_shared.bm);
+                dmfn = smfn;
+            }
+
+            else if ( sshah->flags == GTF_accept_transfer ) {
+                /* whatever works; this is usually zero */
+                dmfn = smfn;
+            }
+            else
+            {
+                if ( mfn_valid(_mfn(smfn)) && smfn != 0 )
+                {
+                    void *src, *dst;
+
+                    /* new grant means new mfn */
+                    dch_replace_child_mfn(dch, smfn, &dmfn);
+
+                    src = map_domain_page(_mfn(smfn));
+                    dst = map_domain_page(_mfn(dmfn));
+                    memcpy(dst, src, PAGE_SIZE);
+                    unmap_domain_page(dst);
+                    unmap_domain_page(src);
+                }
+                else
+                    dmfn = smfn;
+            }
+#endif
+            dact->mfn = _mfn(dmfn);
+#ifndef NDEBUG
+            dact->gfn = _gfn(dmfn);
+#endif
+
+            dge_v1 = &shared_entry_v1(dgt, ref);
+            dge_v1->flags = sge_v1->flags;
+            dge_v1->domid = sge_v1->domid;
+            dge_v1->frame = dmfn;
+        }
+        else
+            BUG();
+
+#if DO_ACT_LOCKING
+        active_entry_release(dact);
+        active_entry_release(sact);
+#endif
+    }
+
+    grant_read_unlock(dgt);
+    grant_read_unlock(sgt);
+
+    return rc;
+}
+
+void gnttab_cloning_sm_init(struct gnttab_cloning_sm *sm)
+{
+    sm->state = NOT_STARTED;
+    sm->next_idx = 0;
+}
+
+int gnttab_page_clone(struct domain_clone_helper *dch, unsigned long mfn, unsigned long *dmfn)
+{
+    struct domain *parent = dch->parent.domain;
+    struct domain *child = dch->child.domain;
+    struct grant_table *sgt, *dgt;
+    unsigned long smfn;
+    int rc = 0;
+
+    if ( dch->sm.state == COMPLETED )
+        goto out;
+
+    sgt = parent->grant_table;
+    //TODO grant_read_lock(sgt);
+
+    smfn = mfn_x(gnttab_shared_mfn(sgt, dch->sm.next_idx));
+    if ( dch->sm.state == NOT_STARTED )
+    {
+        if ( mfn != smfn )
+            goto out_unlock_dgt;
+        else
+            dch->sm.state = IN_PROGRES;
+    }
+    else
+        /* state machine in progress */
+        BUG_ON(mfn != smfn);
+
+    dgt = child->grant_table;
+    *dmfn = mfn_x(gnttab_shared_mfn(dgt, dch->sm.next_idx));
+
+    dch->sm.next_idx++;
+    if ( dch->sm.next_idx == nr_grant_frames(sgt) )
+        dch->sm.state = COMPLETED;
+
+    rc = 1;
+
+out_unlock_dgt:
+    //TODO grant_read_unlock(dgt);
+out:
+    return rc;
 }
 
 static long
@@ -2874,7 +3098,7 @@ static int gnttab_copy_claim_buf(const struct gnttab_copy *op,
 
     if ( !buf->read_only )
     {
-        if ( !get_page_type(buf->page, PGT_writable_page) )
+        if ( !get_page_type(buf->page, PGT_writable_page) && !get_page_type(buf->page, PGT_shared_page) )
         {
             if ( !buf->domain->is_dying )
                 gdprintk(XENLOG_WARNING,
