@@ -1411,6 +1411,18 @@ static int vcpu_set_soft_affinity(struct vcpu *v, const cpumask_t *affinity)
     return vcpu_set_affinity(v, affinity, v->sched_unit->cpu_soft_affinity);
 }
 
+int vcpu_affinity_copy(struct vcpu *dst, struct vcpu *src)
+{
+    int rc;
+
+    rc = vcpu_set_hard_affinity(dst, src->sched_unit->cpu_hard_affinity);
+    if ( rc )
+        goto out;
+    rc = vcpu_set_soft_affinity(dst, src->sched_unit->cpu_soft_affinity);
+out:
+    return rc;
+}
+
 /* Block the currently-executing domain until a pertinent event occurs. */
 void vcpu_block(void)
 {
@@ -1859,6 +1871,49 @@ void domain_update_node_affinity(struct domain *d)
 }
 
 typedef long ret_t;
+
+static int bring_up_vcpus(struct domain *cd, struct cpupool *cpupool)
+{
+    int ret;
+    unsigned int i;
+
+    if ( (ret = cpupool_move_domain(cd, cpupool)) )
+        return ret;
+
+    for ( i = 0; i < cd->max_vcpus; i++ )
+    {
+        if ( cd->vcpu[i] )
+            continue;
+
+        if ( !vcpu_create(cd, i) )
+            return -EINVAL;
+    }
+
+    domain_update_node_affinity(cd);
+    return 0;
+}
+
+int domain_vcpus_clone(struct domain *parent, struct domain *child)
+{
+    unsigned int i;
+    int rc;
+
+    child->max_vcpus = parent->max_vcpus;
+
+    rc = bring_up_vcpus(child, parent->cpupool);
+    if ( rc )
+        goto done;
+
+    for ( i = 0; i < parent->max_vcpus; i++ )
+    {
+        rc = vcpu_affinity_copy(child->vcpu[i], parent->vcpu[i]);
+        if ( rc )
+            goto done;
+    }
+
+done:
+	return rc;
+}
 
 #endif /* !COMPAT */
 
