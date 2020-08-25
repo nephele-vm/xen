@@ -880,8 +880,119 @@ int arch_domain_create(struct domain *d,
     return rc;
 }
 
+int arch_domain_copy(struct domain *d, struct domain *s)
+{
+    bool paging_initialised = false;
+    int rc;
+
+    INIT_PAGE_LIST_HEAD(&d->arch.relmem_list);
+
+    spin_lock_init(&d->arch.e820_lock);
+
+    ASSERT(!is_idle_domain(d));
+
+    d->arch.emulation_flags = s->arch.emulation_flags;
+
+#ifdef CONFIG_PV32
+    HYPERVISOR_COMPAT_VIRT_START(d) =
+        is_pv_domain(d) ? __HYPERVISOR_COMPAT_VIRT_START : ~0u;
+#endif
+
+    if ( (rc = paging_domain_init(d)) != 0 )//TODO copy
+        goto fail;
+    paging_initialised = true;
+
+    if ( (rc = init_domain_cpuid_policy(d)) )
+        goto fail;
+
+    if ( (rc = init_domain_msr_policy(d)) )
+        goto fail;
+
+#if 0//TODO
+    d->arch.ioport_caps =
+        rangeset_new(d, "I/O Ports", RANGESETF_prettyprint_hex);
+    rc = -ENOMEM;
+    if ( d->arch.ioport_caps == NULL )
+        goto fail;
+#endif
+
+    /*
+     * The shared_info machine address must fit in a 32-bit field within a
+     * 32-bit guest's start_info structure. Hence we specify MEMF_bits(32).
+     */
+    if ( (d->shared_info = alloc_xenheap_pages(0, MEMF_bits(32))) == NULL )//TODO what copy here?
+        goto fail;
+
+    clear_page(d->shared_info);
+    share_xen_page_with_guest(virt_to_page(d->shared_info), d, SHARE_rw);
+
+    if ( (rc = init_domain_irq_mapping(d)) != 0 )//TODO copy src
+        goto fail;
+
+#if 0//TODO
+    if ( (rc = iommu_domain_init(d, config->iommu_opts)) != 0 )//TODO disable
+        goto fail;
+
+    psr_domain_init(d);
+#endif
+
+    if ( is_hvm_domain(d) )
+    {
+        if ( (rc = hvm_domain_initialise(d)) != 0 )
+            goto fail;
+    }
+    else if ( is_pv_domain(d) )
+    {
+        mapcache_domain_init(d);
+
+        if ( (rc = pv_domain_initialise(d)) != 0 )
+            goto fail;
+    }
+    else
+        ASSERT_UNREACHABLE(); /* Not HVM and not PV? */
+
+    if ( (rc = tsc_set_info(d, TSC_MODE_DEFAULT, 0, 0, 0)) != 0 )
+    {
+        ASSERT_UNREACHABLE();
+        goto fail;
+    }
+
+    /* PV/PVH guests get an emulated PIT too for video BIOSes to use. */
+    pit_init(d, cpu_khz);
+
+#if 0//TODO
+    /*
+     * If the FPU does not save FCS/FDS then we can always
+     * save/restore the 64-bit FIP/FDP and ignore the selectors.
+     */
+    d->arch.x87_fip_width = cpu_has_fpu_sel ? 0 : 8;
+#endif
+
+    domain_cpu_policy_changed(d);
+
+    d->arch.msr_relaxed = s->arch.msr_relaxed;
+
+    return 0;
+
+ fail:
+    d->is_dying = DOMDYING_dead;
+    psr_domain_free(d);
+    iommu_domain_destroy(d);
+    cleanup_domain_irq_mapping(d);
+    free_xenheap_page(d->shared_info);
+    xfree(d->arch.cpuid);
+    xfree(d->arch.msr);
+    if ( paging_initialised )
+        paging_final_teardown(d);
+    free_perdomain_mappings(d);
+
+    return rc;
+}
+
 void arch_domain_destroy(struct domain *d)
 {
+    clone_fini(d);
+
     if ( is_hvm_domain(d) )
         hvm_domain_destroy(d);
 
@@ -1761,7 +1872,7 @@ static void load_segments(struct vcpu *n)
  * inactive GS base behind Xen's back.  Therefore, Xen's copy of the inactive
  * GS base is still accurate, and doesn't need reading back from hardware.
  */
-static void save_segments(struct vcpu *v)
+void save_segments(struct vcpu *v)
 {
     struct cpu_user_regs *regs = &v->arch.user_regs;
 
@@ -2412,7 +2523,7 @@ int domain_relinquish_resources(struct domain *d)
              * If the domain is forked, decrement the parent's pause count
              * and release the domain.
              */
-            if ( mem_sharing_is_fork(d) )
+            if ( mem_sharing_is_fork(d) )//TODO revisit
             {
                 struct domain *parent = d->parent;
 
@@ -2420,6 +2531,12 @@ int domain_relinquish_resources(struct domain *d)
                 domain_unpause(parent);
                 put_domain(parent);
             }
+        }
+        else
+        {
+            ret = relinquish_shared_pages(d);
+            if ( ret )
+                return ret;
         }
 #endif
 

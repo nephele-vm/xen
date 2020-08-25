@@ -59,7 +59,7 @@ boolean_param("dom0_vcpus_pin", opt_dom0_vcpus_pin);
 DEFINE_SPINLOCK(domlist_update_lock);
 DEFINE_RCU_READ_LOCK(domlist_read_lock);
 
-#define DOMAIN_HASH_SIZE 256
+#define DOMAIN_HASH_SIZE 4096
 #define DOMAIN_HASH(_id) ((int)(_id)&(DOMAIN_HASH_SIZE-1))
 static struct domain *domain_hash[DOMAIN_HASH_SIZE];
 struct domain *domain_list;
@@ -698,6 +698,213 @@ struct domain *domain_create(domid_t domid,
         memcpy(d->handle, config->handle, sizeof(d->handle));
     }
 
+    return d;
+
+ fail:
+    ASSERT(err < 0);      /* Sanity check paths leading here. */
+    err = err ?: -EILSEQ; /* Release build safety. */
+
+    d->is_dying = DOMDYING_dead;
+    if ( hardware_domain == d )
+        hardware_domain = old_hwdom;
+    atomic_set(&d->refcnt, DOMAIN_DESTROYED);
+
+    sched_destroy_domain(d);
+
+    if ( d->max_vcpus )
+    {
+        d->max_vcpus = 0;
+        XFREE(d->vcpu);
+    }
+    if ( init_status & INIT_arch )
+        arch_domain_destroy(d);
+    if ( init_status & INIT_gnttab )
+        grant_table_destroy(d);
+    if ( init_status & INIT_evtchn )
+    {
+        evtchn_destroy(d);
+        evtchn_destroy_final(d);
+        radix_tree_destroy(&d->pirq_tree, free_pirq_struct);
+    }
+    if ( init_status & INIT_watchdog )
+        watchdog_domain_destroy(d);
+
+    /* Must not hit a continuation in this context. */
+    if ( domain_teardown(d) )
+        ASSERT_UNREACHABLE();
+
+    _domain_destroy(d);
+
+    return ERR_PTR(err);
+}
+
+extern int arch_domain_copy(struct domain *d, struct domain *s/*, unsigned int domcr_flags,
+                       struct xen_arch_domainconfig *config*/);
+extern int grant_table_init2(struct domain *d, struct domain *s);
+
+struct domain *domain_copy(struct domain *s, domid_t domid)
+{
+    struct domain *d, **pd, *old_hwdom = NULL;
+    enum { INIT_watchdog = 1u<<1,
+           INIT_evtchn = 1u<<3, INIT_gnttab = 1u<<4, INIT_arch = 1u<<5 };
+    int err, init_status = 0;
+
+    TRACE_1D(TRC_CLONE_DOMAIN_COPY, 1);
+
+    if ( (d = alloc_domain_struct()) == NULL )
+        return ERR_PTR(-ENOMEM);
+
+    /* Sort out our idea of is_system_domain(). */
+    d->domain_id = domid;
+
+    d->options = s->options;
+    d->vmtrace_size = s->vmtrace_size;
+
+    /* Sort out our idea of is_control_domain(). */
+    d->is_privileged = s->is_privileged;
+
+    /* Sort out our idea of is_hardware_domain(). */
+    if ( domid == 0 || domid == hardware_domid )
+    {
+        if ( hardware_domid < 0 || hardware_domid >= DOMID_FIRST_RESERVED )
+            panic("The value of hardware_dom must be a valid domain ID\n");
+
+        old_hwdom = hardware_domain;
+        hardware_domain = d;
+    }
+
+    TRACE_1D(TRC_DOM0_DOM_ADD, d->domain_id);
+
+    lock_profile_register_struct(LOCKPROF_TYPE_PERDOM, d, domid);
+
+    atomic_set(&d->refcnt, 1);
+    RCU_READ_LOCK_INIT(&d->rcu_lock);
+    spin_lock_init_prof(d, domain_lock);
+    spin_lock_init_prof(d, page_alloc_lock);
+    spin_lock_init(&d->hypercall_deadlock_mutex);
+    INIT_PAGE_LIST_HEAD(&d->page_list);
+    INIT_PAGE_LIST_HEAD(&d->extra_page_list);
+    INIT_PAGE_LIST_HEAD(&d->xenpage_list);
+
+    spin_lock_init(&d->node_affinity_lock);
+    d->node_affinity = NODE_MASK_ALL;
+    d->auto_node_affinity = 1;
+
+    spin_lock_init(&d->shutdown_lock);
+    d->shutdown_code = SHUTDOWN_CODE_INVALID;
+
+    spin_lock_init(&d->pbuf_lock);
+
+    rwlock_init(&d->vnuma_rwlock);
+
+#ifdef CONFIG_HAS_PCI
+    INIT_LIST_HEAD(&d->pdev_list);
+#endif
+
+    /* All error paths can depend on the above setup. */
+
+    /*
+     * Allocate d->vcpu[] and set ->max_vcpus up early.  Various per-domain
+     * resources want to be sized based on max_vcpus.
+     */
+    if ( !is_system_domain(d) )
+    {
+        err = -ENOMEM;
+        d->vcpu = xzalloc_array(struct vcpu *, s->max_vcpus);
+        if ( !d->vcpu )
+            goto fail;
+
+        d->max_vcpus = s->max_vcpus;
+    }
+
+    if ( (err = xsm_alloc_security_domain(d)) != 0 )
+        goto fail;
+
+    err = -ENOMEM;
+    if ( !zalloc_cpumask_var(&d->dirty_cpumask) )
+        goto fail;
+
+    rangeset_domain_initialise(d);
+
+    /* DOMID_{XEN,IO,etc} (other than IDLE) are sufficiently constructed. */
+    if ( is_system_domain(d) && !is_idle_domain(d) )
+        return d;
+
+    if ( !is_idle_domain(d) )//TODO always
+    {
+        if ( !is_hardware_domain(d) )
+            d->nr_pirqs = nr_static_irqs + extra_domU_irqs;
+        else
+            d->nr_pirqs = extra_hwdom_irqs ? nr_static_irqs + extra_hwdom_irqs
+                                           : arch_hwdom_irqs(domid);
+        d->nr_pirqs = min(d->nr_pirqs, nr_irqs);
+
+        radix_tree_init(&d->pirq_tree);
+    }
+
+    if ( (err = arch_domain_copy(d, /*domcr_flags, config*/s)) != 0 )
+        goto fail;
+    init_status |= INIT_arch;
+
+    if ( !is_idle_domain(d) )//TODO never idle
+    {
+        watchdog_domain_init(d);
+        init_status |= INIT_watchdog;
+
+        d->iomem_caps = rangeset_new(d, "I/O Memory", RANGESETF_prettyprint_hex);
+        d->irq_caps   = rangeset_new(d, "Interrupts", 0);
+        if ( !d->iomem_caps || !d->irq_caps )
+            goto fail;
+
+        if ( (err = xsm_domain_create(XSM_HOOK, d, 0/*TODO config->ssidref*/)) != 0 )
+            goto fail;
+
+        d->controller_pause_count = 1;
+        atomic_inc(&d->pause_count);
+
+        if ( (err = evtchn_init(d, s->max_evtchn_port)) != 0 )
+            goto fail;
+        init_status |= INIT_evtchn;
+
+        if ( (err = grant_table_init2(d, s)) != 0 )
+            goto fail;
+        init_status |= INIT_gnttab;
+
+        if ( (err = argo_init(d)) != 0 )
+            goto fail;
+
+        err = -ENOMEM;
+
+        d->pbuf = xzalloc_array(char, DOMAIN_PBUF_SIZE);
+        if ( !d->pbuf )
+            goto fail;
+
+        if ( (err = sched_init_domain(d, 0)) != 0 )
+            goto fail;
+
+        if ( (err = late_hwdom_init(d)) != 0 )//TODO nothing here
+            goto fail;
+
+        /*
+         * Must not fail beyond this point, as our caller doesn't know whether
+         * the domain has been entered into domain_list or not.
+         */
+
+        spin_lock(&domlist_update_lock);
+        pd = &domain_list; /* NB. domain_list maintained in order of domid. */
+        for ( pd = &domain_list; *pd != NULL; pd = &(*pd)->next_in_list )
+            if ( (*pd)->domain_id > d->domain_id )
+                break;
+        d->next_in_list = *pd;
+        d->next_in_hashbucket = domain_hash[DOMAIN_HASH(domid)];
+        rcu_assign_pointer(*pd, d);
+        rcu_assign_pointer(domain_hash[DOMAIN_HASH(domid)], d);
+        spin_unlock(&domlist_update_lock);
+
+        memcpy(d->handle, s->handle, sizeof(d->handle));
+    }
+
+    TRACE_1D(TRC_CLONE_DOMAIN_COPY, 0);
     return d;
 
  fail:
