@@ -1482,6 +1482,8 @@ static int fixup_page_fault(unsigned long addr, struct cpu_user_regs *regs)
     return 0;
 }
 
+extern int do_cow(unsigned long va);
+
 void do_page_fault(struct cpu_user_regs *regs)
 {
     unsigned long addr;
@@ -1491,6 +1493,18 @@ void do_page_fault(struct cpu_user_regs *regs)
 
     /* fixup_page_fault() might change regs->error_code, so cache it here. */
     error_code = regs->error_code;
+
+    if ( current->domain->arch.cloning.triggered )
+    {
+        int rc;
+
+        rc = do_cow(addr);
+        if ( rc == 0 )
+        {
+            regs->error_code = 0;
+            return;
+        }
+    }
 
     if ( debugger_trap_entry(TRAP_page_fault, regs) )
         return;

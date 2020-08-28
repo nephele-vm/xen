@@ -134,6 +134,7 @@
 #include <asm/mem_sharing.h>
 #include <public/memory.h>
 #include <public/sched.h>
+#include <public/clone.h>
 #include <xsm/xsm.h>
 #include <xen/trace.h>
 #include <asm/setup.h>
@@ -143,10 +144,12 @@
 #include <asm/guest.h>
 #include <asm/pv/domain.h>
 #include <asm/pv/mm.h>
+#include <asm/pv/p2m.h>
 
 #ifdef CONFIG_PV
 #include "pv/mm.h"
 #endif
+#include "mm/mm-locks.h"
 
 /* Override macros from asm/page.h to make them work with mfn_t */
 #undef virt_to_mfn
@@ -860,7 +863,7 @@ get_page_from_l1e(
     uint32_t l1f = l1e_get_flags(l1e);
     struct vcpu *curr = current;
     struct domain *real_pg_owner;
-    bool write;
+    bool write = false;
 
     if ( unlikely(!(l1f & _PAGE_PRESENT)) )
     {
@@ -988,6 +991,9 @@ get_page_from_l1e(
         pg_owner = real_pg_owner;
     }
 
+    if ( real_pg_owner == dom_cow && page->sharing->writable )
+        goto skip_nonwritable_shared;
+
     /*
      * Extra paranoid check for shared memory. Writable mappings
      * disallowed (unshare first!)
@@ -1009,6 +1015,7 @@ get_page_from_l1e(
         goto could_not_pin;
     }
 
+skip_nonwritable_shared:
     if ( pte_flags_to_cacheattr(l1f) !=
          ((page->count_info & PGC_cacheattr_mask) >> PGC_cacheattr_base) )
     {
@@ -1140,7 +1147,7 @@ static int get_page_and_type_from_mfn(
 }
 
 define_get_linear_pagetable(l2);
-static int
+int
 get_page_from_l2e(
     l2_pgentry_t l2e, mfn_t l2mfn, struct domain *d, unsigned int flags)
 {
@@ -1164,7 +1171,7 @@ get_page_from_l2e(
 }
 
 define_get_linear_pagetable(l3);
-static int
+int
 get_page_from_l3e(
     l3_pgentry_t l3e, mfn_t l3mfn, struct domain *d, unsigned int flags)
 {
@@ -1188,7 +1195,7 @@ get_page_from_l3e(
 }
 
 define_get_linear_pagetable(l4);
-static int
+int
 get_page_from_l4e(
     l4_pgentry_t l4e, mfn_t l4mfn, struct domain *d, unsigned int flags)
 {
@@ -1349,7 +1356,7 @@ static int promote_l1_table(struct page_info *page)
 
     pl1e = __map_domain_page(page);
 
-    for ( i = 0; i < L1_PAGETABLE_ENTRIES; i++ )
+    for ( i = page->nr_validated_ptes; i < L1_PAGETABLE_ENTRIES; i++ )
     {
         if ( !(l1e_get_flags(pl1e[i]) & _PAGE_PRESENT) )
         {
@@ -2585,7 +2592,7 @@ bool get_page(struct page_info *page, const struct domain *domain)
 {
     const struct domain *owner = page_get_owner_and_reference(page);
 
-    if ( likely(owner == domain) )
+    if ( likely(owner == domain) || owner == dom_cow )
         return true;
 
     if ( !paging_mode_refcounts(domain) && !domain->is_dying )
@@ -6258,6 +6265,265 @@ unsigned long get_upper_mfn_bound(void)
     max_mfn = min(max_mfn, 1UL << 32);
 #endif
     return min(max_mfn, 1UL << (paddr_bits - PAGE_SHIFT)) - 1;
+}
+
+/************************************************
+ * COW
+ ************************************************/
+
+int arch_pt_pages_num(struct domain *d)
+{
+    int n;
+
+    n  = atomic_read(&d->arch.pv.nr_l4_pages);
+    n += atomic_read(&d->arch.pv.nr_l3_pages);
+    n += atomic_read(&d->arch.pv.nr_l2_pages);
+    n += atomic_read(&d->arch.pv.nr_l1_pages);
+
+    return n;
+}
+
+int l1e_make_ro(l1_pgentry_t *pl1e, unsigned long gl1mfn,
+        struct domain *pg_owner)
+{
+    struct vcpu *v = current;
+    unsigned long mfn;
+    u32 flags;
+    struct page_info *page;
+    l1_pgentry_t nl1e;
+    int rc;
+
+    flags = l1e_get_flags(*pl1e);
+    if ( (flags & _PAGE_RW) == 0 )
+        return -EINVAL;
+
+    mfn = l1e_get_pfn(*pl1e);
+
+    page = mfn_to_page(_mfn(mfn)); /* TODO necessary? */
+    if ( unlikely(!page) )
+        return -EINVAL;
+
+    nl1e = l1e_from_pfn(mfn, flags & ~_PAGE_RW);
+    rc = mod_l1_entry(pl1e, nl1e, _mfn(gl1mfn), 0, v, pg_owner);
+
+    return rc;
+}
+
+int l1e_make_rw(l1_pgentry_t *pl1e, unsigned long gl1mfn,
+        struct domain *pg_owner)
+{
+    struct vcpu *v = current;
+    unsigned long mfn;
+    u32 flags;
+    struct page_info *page;
+    l1_pgentry_t nl1e;
+    int rc;
+
+    flags = l1e_get_flags(*pl1e);
+    if ( flags & _PAGE_RW )
+        return -EINVAL;
+
+    mfn = l1e_get_pfn(*pl1e);
+
+    page = mfn_to_page(_mfn(mfn)); /* TODO necessary? */
+    if ( unlikely(!page) )
+        return -EINVAL;
+
+    nl1e = l1e_from_pfn(mfn, flags | _PAGE_RW);
+    rc = mod_l1_entry(pl1e, nl1e, _mfn(gl1mfn), 0, v, pg_owner);
+
+    return rc;
+}
+
+static
+int l1e_get(unsigned long va, l1_pgentry_t **ppl1e,
+        struct page_info **pgl1pg, mfn_t *pgl1mfn)
+{
+    struct vcpu *v = current;
+    struct domain *d = v->domain;
+    mfn_t gl1mfn;
+    struct page_info *gl1pg;
+    l1_pgentry_t *pl1e;
+    int rc;
+
+    rc = -EINVAL;
+    pl1e = map_guest_l1e(va, &gl1mfn);
+    if ( unlikely(!pl1e) )
+        goto out;
+
+    gfn_lock(p2m_get_hostp2m(d), gl1mfn, 0);
+
+    gl1pg = get_page_from_mfn(gl1mfn, d);
+    if ( unlikely(!gl1pg) )
+        goto out;
+
+    if ( !page_lock(gl1pg) )
+    {
+        put_page(gl1pg);
+        goto out;
+    }
+
+    if ( (gl1pg->u.inuse.type_info & PGT_type_mask) != PGT_l1_page_table )
+    {
+        page_unlock(gl1pg);
+        put_page(gl1pg);
+        goto out;
+    }
+
+    *ppl1e = pl1e;
+    *pgl1pg = gl1pg;
+    if ( pgl1mfn )
+        *pgl1mfn = gl1mfn;
+
+    rc = 0;
+
+out:
+    if ( rc )
+    {
+        if ( pl1e )
+            unmap_domain_page(pl1e);
+    }
+    return rc;
+}
+
+static
+void l1e_put(struct domain *d, l1_pgentry_t *pl1e, struct page_info *gl1pg, mfn_t gl1mfn)
+{
+    page_unlock(gl1pg);
+    put_page(gl1pg);
+    gfn_unlock(p2m_get_hostp2m(d), gl1mfn, 0);
+    unmap_domain_page(pl1e);
+}
+
+#if 0
+#define COW_LOG(fmt, ...) printk(fmt, __VA_ARGS__)
+#else
+#define COW_LOG(fmt, ...)
+#endif
+
+int do_cow(unsigned long va)
+{
+    struct vcpu *v = current;
+    struct domain *d = v->domain;
+    struct page_info *gl1pg, *page;
+    mfn_t gl1mfn;
+    l1_pgentry_t *pl1e, nl1e;
+    unsigned long gmfn, smfn, cmfn = 0;
+    int rc;
+
+    TRACE_1D(TRC_CLONE_COW, 1);
+
+    rc = l1e_get(va, &pl1e, &gl1pg, &gl1mfn);
+    if ( rc )
+        goto out;
+
+    smfn = l1e_get_pfn(*pl1e);
+    gmfn = get_gpfn_from_mfn(smfn);
+
+    COW_LOG("%s domid=%d addr=%lx rip=%lx",
+        __FUNCTION__, d->domain_id, va, v->arch.user_regs.rip);
+
+    rc = mem_sharing_unshare_page_pv(d, gmfn, smfn, false, &cmfn);
+    if ( rc ) {
+        gdprintk(XENLOG_ERR, "Could not unshare gmfn=%lx\n", gmfn);
+        goto out_l1e_put;
+    }
+
+    /* set type on new page */
+    page = mfn_to_page(_mfn(cmfn));
+    BUG_ON(page == NULL);
+    if ( !get_page_and_type(page, d, PGT_writable_page) )
+        BUG();
+
+    /* new entry */
+    nl1e = l1e_from_pfn(cmfn, l1e_get_flags(*pl1e));
+    l1e_add_flags(nl1e, _PAGE_RW);
+
+    paging_write_guest_entry(v,
+        &l1e_get_intpte(*pl1e), l1e_get_intpte(nl1e), gl1mfn);
+
+    rc = p2m_fll_set_entry(d, gmfn, cmfn);
+    ASSERT(rc == 0);
+
+    atomic_inc(&d->cow_pages);
+
+    COW_LOG(" shr_pages=%d cow_pages=%d gmfn=%lx mfn=%lx new mfn=%lx\n",
+        atomic_read(&d->shr_pages), atomic_read(&d->cow_pages),
+        gmfn, smfn, cmfn);
+
+out_l1e_put:
+    l1e_put(d, pl1e, gl1pg, gl1mfn);
+out:
+    TRACE_1D(TRC_CLONE_COW, 0);
+    return rc;
+}
+
+
+int map_cloning_notification_ring(unsigned long va, unsigned long pages_num,
+        void **out_mapping)
+{
+    struct page_info *gl1pg;
+    mfn_t gl1mfn;
+    l1_pgentry_t *pl1e;
+    mfn_t mfns[CLONING_RING_MAX_PAGES];
+    void *m;
+    int rc, i;
+
+    if ( pages_num > CLONING_RING_MAX_PAGES )
+    {
+        rc = -EINVAL;
+        goto out;
+    }
+    if ( !out_mapping )
+    {
+        rc = -EINVAL;
+        goto out;
+    }
+
+    for ( i = 0; i < pages_num; i++ )
+    {
+        rc = l1e_get(va + i * PAGE_SIZE, &pl1e, &gl1pg, &gl1mfn);
+        if ( rc )
+            goto out;
+
+        if ( !(l1e_get_flags(*pl1e) && _PAGE_PRESENT) )
+        {
+            rc = -EINVAL;
+            goto out_l1e_put;
+        }
+
+        mfns[i] = l1e_get_mfn(*pl1e);
+        if ( !mfn_valid(mfns[i]) )
+        {
+            rc = -EINVAL;
+            goto out_l1e_put;
+        }
+
+out_l1e_put:
+        l1e_put(current->domain, pl1e, gl1pg, gl1mfn);
+        if ( rc )
+            goto out;
+    }
+
+    m = vmap(mfns, pages_num);
+    if ( !m )
+    {
+        rc = -ENOMEM;
+        goto out;
+    }
+
+    *out_mapping = m;
+
+out:
+    return rc;
+}
+
+int unmap_cloning_notification_ring(void *mapping)
+{
+    if ( !mapping )
+        return -EINVAL;
+    vunmap(mapping);
+    return 0;
 }
 
 /*

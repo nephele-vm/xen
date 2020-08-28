@@ -135,17 +135,17 @@ struct page_info
         /* For non-pinnable single-page shadows, a higher entry that points
          * at us. */
         paddr_t up;
+    };
 
 #ifdef CONFIG_MEM_SHARING
-        /* For shared/sharable pages, we use a doubly-linked list
-         * of all the {pfn,domain} pairs that map this page. We also include
-         * an opaque handle, which is effectively a version, so that clients
-         * of sharing share the version they expect to.
-         * This list is allocated and freed when a page is shared/unshared.
-         */
-        struct page_sharing_info *sharing;
+    /* For shared/sharable pages, we use a doubly-linked list
+     * of all the {pfn,domain} pairs that map this page. We also include
+     * an opaque handle, which is effectively a version, so that clients
+     * of sharing share the version they expect to.
+     * This list is allocated and freed when a page is shared/unshared.
+     */
+    struct page_sharing_info *sharing;/*TODO union or not?*/
 #endif
-    };
 
     /* Reference count and various PGC_xxx flags and fields. */
     unsigned long count_info;
@@ -421,6 +421,12 @@ int  put_old_guest_table(struct vcpu *);
 int  get_page_from_l1e(
     l1_pgentry_t l1e, struct domain *l1e_owner, struct domain *pg_owner);
 void put_page_from_l1e(l1_pgentry_t l1e, struct domain *l1e_owner);
+int get_page_from_l2e(
+    l2_pgentry_t l2e, mfn_t l2mfn, struct domain *d, unsigned int flags);
+int get_page_from_l3e(
+    l3_pgentry_t l3e, mfn_t l3mfn, struct domain *d, unsigned int flags);
+int get_page_from_l4e(
+    l4_pgentry_t l4e, mfn_t l4mfn, struct domain *d, unsigned int flags);
 
 static inline struct page_info *get_page_from_mfn(mfn_t mfn, struct domain *d)
 {

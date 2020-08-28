@@ -550,6 +550,11 @@ void destroy_ring_for_helper(void **_va, struct page_info *page);
 /* Return the upper bound of MFNs, including hotplug memory. */
 unsigned long get_upper_mfn_bound(void);
 
+int l1e_make_ro(l1_pgentry_t *pl1e, unsigned long gl1mfn,
+        struct domain *pg_owner);
+int l1e_make_rw(l1_pgentry_t *pl1e, unsigned long gl1mfn,
+        struct domain *pg_owner);
+
 #include <asm/flushtlb.h>
 
 static inline void accumulate_tlbflush(bool *need_tlbflush,

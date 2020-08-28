@@ -79,7 +79,7 @@ static int __init parse_max_order(const char *s)
 }
 custom_param("memop-max-order", parse_max_order);
 
-static unsigned int max_order(const struct domain *d)
+/*static*/ unsigned int max_order(const struct domain *d)
 {
     unsigned int order = domu_max_order;
 
@@ -154,7 +154,7 @@ static void increase_reservation(struct memop_args *a)
     a->nr_done = i;
 }
 
-static void populate_physmap(struct memop_args *a)
+static void populate_physmap(struct memop_args *a)//TODO should we use this one?
 {
     struct page_info *page;
     unsigned int i, j;
@@ -1369,7 +1369,7 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         if ( unlikely(start_extent >= reservation.nr_extents) )
             return start_extent;
 
-        d = rcu_lock_domain_by_any_id(reservation.domid);
+        d = rcu_lock_domain_by_any_id(reservation.domid);//TODO we should do this
         if ( d == NULL )
             return start_extent;
         args.domain = d;

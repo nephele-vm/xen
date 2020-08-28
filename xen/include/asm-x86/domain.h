@@ -3,6 +3,7 @@
 
 #include <xen/mm.h>
 #include <xen/radix-tree.h>
+#include <xen/clone.h>
 #include <asm/hvm/vcpu.h>
 #include <asm/hvm/domain.h>
 #include <asm/e820.h>
@@ -330,6 +331,8 @@ struct arch_domain
 #ifdef CONFIG_MEM_SHARING
     struct mem_sharing_domain mem_sharing;
 #endif
+    /* TODO struct domain_clone_helper dch; */
+    struct cloning_domain cloning;
 
     struct paging_domain paging;
     struct p2m_domain *p2m;
