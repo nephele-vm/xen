@@ -26,7 +26,7 @@
 
 #ifdef CONFIG_MEM_SHARING
 
-#define mem_sharing_enabled(d) ((d)->arch.hvm.mem_sharing.enabled)
+#define mem_sharing_enabled(d) ((d)->arch.mem_sharing.enabled)
 
 /* Auditing of memory sharing code? */
 #ifndef NDEBUG

@@ -1410,7 +1410,7 @@ int __mem_sharing_unshare_page(struct domain *d,
 int relinquish_shared_pages(struct domain *d)
 {
     int rc = 0;
-    struct mem_sharing_domain *msd = &d->arch.hvm.mem_sharing;
+    struct mem_sharing_domain *msd = &d->arch.mem_sharing;
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     unsigned long gfn, count = 0;
 
@@ -1520,6 +1520,7 @@ static inline int mem_sharing_control(struct domain *d, bool enable,
 {
     if ( enable )
     {
+#if 0
         if ( unlikely(!is_hvm_domain(d) || !cpu_has_vmx) )
             return -EOPNOTSUPP;
 
@@ -1529,9 +1530,10 @@ static inline int mem_sharing_control(struct domain *d, bool enable,
         if ( unlikely(is_iommu_enabled(d) &&
                       !(flags & XENMEM_FORK_WITH_IOMMU_ALLOWED)) )
             return -EXDEV;
+#endif
     }
 
-    d->arch.hvm.mem_sharing.enabled = enable;
+    d->arch.mem_sharing.enabled = enable;
     return 0;
 }
 

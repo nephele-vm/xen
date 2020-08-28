@@ -258,7 +258,7 @@ void vmx_intr_assist(void)
 
 #ifdef CONFIG_MEM_SHARING
     /* Block event injection for VM fork if requested */
-    if ( unlikely(v->domain->arch.hvm.mem_sharing.block_interrupts) )
+    if ( unlikely(v->domain->arch.mem_sharing.block_interrupts) )
         return;
 #endif
 

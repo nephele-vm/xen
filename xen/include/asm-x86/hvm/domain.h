@@ -29,15 +29,20 @@
 #include <asm/hvm/svm/vmcb.h>
 
 #ifdef CONFIG_MEM_SHARING
+//TODO remove from hvm
 struct mem_sharing_domain
 {
     bool enabled, block_interrupts;
 
-    /*
-     * When releasing shared gfn's in a preemptible manner, recall where
-     * to resume the search.
-     */
-    unsigned long next_shared_gfn_to_relinquish;
+    union {
+        /*
+         * When releasing shared gfn's in a preemptible manner, recall where
+         * to resume the search.
+         */
+        unsigned long next_shared_gfn_to_relinquish;
+
+        struct p2m_pv_iter *p2m_pv_iter;
+    };
 };
 #endif
 
@@ -154,10 +159,6 @@ struct hvm_domain {
         struct vmx_domain vmx;
         struct svm_domain svm;
     };
-
-#ifdef CONFIG_MEM_SHARING
-    struct mem_sharing_domain mem_sharing;
-#endif
 };
 
 #endif /* __ASM_X86_HVM_DOMAIN_H__ */

@@ -327,6 +327,10 @@ struct arch_domain
         struct hvm_domain hvm;
     };
 
+#ifdef CONFIG_MEM_SHARING
+    struct mem_sharing_domain mem_sharing;
+#endif
+
     struct paging_domain paging;
     struct p2m_domain *p2m;
     /* To enforce lock ordering in the pod code wrt the
