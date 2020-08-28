@@ -1377,6 +1377,8 @@ static int promote_l1_table(struct page_info *page)
         pl1e[i] = adjust_guest_l1e(pl1e[i], d);
     }
 
+    atomic_inc(&d->arch.pv.nr_l1_pages);
+
     unmap_domain_page(pl1e);
     return 0;
 
@@ -1524,6 +1526,9 @@ static int promote_l2_table(struct page_info *page, unsigned long type)
     if ( !rc && (type & PGT_pae_xen_l2) )
         init_xen_pae_l2_slots(pl2e, d);
 
+    if ( !rc )
+        atomic_inc(&d->arch.pv.nr_l2_pages);
+
     unmap_domain_page(pl2e);
     return rc;
 }
@@ -1642,6 +1647,9 @@ static int promote_l3_table(struct page_info *page)
         while ( i-- > 0 )
             pl3e[i] = unadjust_guest_l3e(pl3e[i], d);
     }
+
+    if ( !rc )
+        atomic_inc(&d->arch.pv.nr_l3_pages);
 
     unmap_domain_page(pl3e);
     return rc;

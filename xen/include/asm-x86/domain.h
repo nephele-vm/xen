@@ -270,6 +270,9 @@ struct pv_domain
     l1_pgentry_t **gdt_ldt_l1tab;
 
     atomic_t nr_l4_pages;
+    atomic_t nr_l3_pages;
+    atomic_t nr_l2_pages;
+    atomic_t nr_l1_pages;
 
     /* Is a 32-bit PV guest? */
     bool is_32bit;
