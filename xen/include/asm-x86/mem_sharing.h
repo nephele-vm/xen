@@ -50,6 +50,8 @@ struct page_sharing_info
 {
     struct page_info *pg;   /* Back pointer to the page. */
     shr_handle_t handle;    /* Globally unique version / handle. */
+    bool writable;//TODO revisit
+    atomic_t refcount;
 #if MEM_SHARING_AUDIT
     struct list_head entry; /* List of all shared pages (entry). */
     struct rcu_head rcu_head; /* List of all shared pages (entry). */
@@ -64,6 +66,20 @@ struct page_sharing_info
 unsigned int mem_sharing_get_nr_saved_mfns(void);
 unsigned int mem_sharing_get_nr_shared_mfns(void);
 
+int mem_sharing_nominate_page(struct domain *d, gfn_t gfn,
+                         mfn_t mfn, int p2mt, int p2ma,
+                         int expected_refcnt,
+                         bool writable,
+                         bool validate_only,
+                         shr_handle_t *phandle);
+
+int mem_sharing_add_to_physmap(struct domain *sd, mfn_t smfn, shr_handle_t sh,
+                               struct domain *cd, unsigned long cgfn, bool clone);
+
+int mem_sharing_share_to_child(struct domain *parent, struct domain *child,
+        unsigned long mfn, unsigned long gpfn,
+        int l1t, bool writable);
+
 /* Only fails with -ENOMEM. Enforce it with a BUG_ON wrapper. */
 int __mem_sharing_unshare_page(struct domain *d,
                                unsigned long gfn,
@@ -74,6 +90,23 @@ static inline int mem_sharing_unshare_page(struct domain *d,
 {
     int rc = __mem_sharing_unshare_page(d, gfn, false);
     BUG_ON(rc && (rc != -ENOMEM));
+    return rc;
+}
+
+int __mem_sharing_unshare_page_raw(struct domain *d,
+                               unsigned long gfn,
+                               mfn_t mfn,
+                               bool destroy,
+                               bool must_exist,
+                               unsigned long *new_mfn);
+static inline int mem_sharing_unshare_page_pv(struct domain *d,
+                                           unsigned long gfn,
+                                           unsigned long mfn,
+                                           bool destroy,
+                                           unsigned long *new_mfn)
+{
+    int rc = __mem_sharing_unshare_page_raw(d, gfn, _mfn(mfn), destroy, false, new_mfn);
+    BUG_ON( rc && (rc != -ENOMEM && rc != -ESRCH) );
     return rc;
 }
 
@@ -110,6 +143,7 @@ int mem_sharing_domctl(struct domain *d,
  * Preemptible.
  */
 int relinquish_shared_pages(struct domain *d);
+int relinquish_shared_pages_pv(struct domain *d);
 
 #else
 
@@ -149,5 +183,12 @@ static inline int mem_sharing_fork_page(struct domain *d, gfn_t gfn, bool lock)
 }
 
 #endif
+
+extern int page_sharing_info_pool_enabled;
+int page_sharing_info_allocator_init(unsigned int max_pages);
+void page_sharing_info_show_stats(void);
+
+int mem_sharing_pools_init(struct domain *d);
+int mem_sharing_pools_fini(struct domain *d);
 
 #endif /* __MEM_SHARING_H__ */

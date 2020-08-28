@@ -264,7 +264,6 @@ config MEM_PAGING
 
 config MEM_SHARING
 	bool "Xen memory sharing support (UNSUPPORTED)" if UNSUPPORTED
-	depends on HVM
 
 endmenu
 
