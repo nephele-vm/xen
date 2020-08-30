@@ -274,6 +274,30 @@ static struct vnuma_info *vnuma_init(const struct xen_domctl_vnuma *uinfo,
     return ERR_PTR(ret);
 }
 
+long domain_generate_domid(domid_t *pdom)
+{
+    long ret = 0;
+    domid_t dom;
+    static domid_t rover = 0;
+
+    for ( dom = rover + 1; dom != rover; dom++ )
+    {
+        if ( dom == DOMID_FIRST_RESERVED )
+            dom = 1;
+        if ( is_free_domid(dom) )
+            break;
+    }
+
+    if ( dom == rover )
+        ret = -ENOMEM;
+    else
+        rover = dom;
+
+    *pdom = dom;
+
+    return ret;
+}
+
 long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 {
     long ret = 0;
@@ -405,7 +429,6 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
     case XEN_DOMCTL_createdomain:
     {
         domid_t        dom;
-        static domid_t rover = 0;
 
         dom = op->domain;
         if ( (dom > 0) && (dom < DOMID_FIRST_RESERVED) )
@@ -415,21 +438,7 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
                 break;
         }
         else
-        {
-            for ( dom = rover + 1; dom != rover; dom++ )
-            {
-                if ( dom == DOMID_FIRST_RESERVED )
-                    dom = 1;
-                if ( is_free_domid(dom) )
-                    break;
-            }
-
-            ret = -ENOMEM;
-            if ( dom == rover )
-                break;
-
-            rover = dom;
-        }
+            ret = domain_generate_domid(&dom);
 
         d = domain_create(dom, &op->u.createdomain, false);
         if ( IS_ERR(d) )
