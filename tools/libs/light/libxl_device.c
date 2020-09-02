@@ -182,8 +182,8 @@ retry_transaction:
 
     /* FIXME: read frontend_path and check state before removing stuff */
 
-    rc = libxl__xs_rm_checked(gc, t, libxl_path);
-    if (rc) goto out;
+    //TODO rc = libxl__xs_rm_checked(gc, t, libxl_path);
+    //if (rc) goto out;
 
     if (!libxl_only) {
         rc = libxl__xs_write_checked(gc, t, GCSPRINTF("%s/frontend",libxl_path),
@@ -198,7 +198,7 @@ retry_transaction:
     /* xxx much of this function lacks error checks! */
 
     if (fents || ro_fents) {
-        xs_rm(ctx->xsh, t, frontend_path);
+        //TODO xs_rm(ctx->xsh, t, frontend_path);
         xs_mkdir(ctx->xsh, t, frontend_path);
         /* Console 0 is a special case. It doesn't use the regular PV
          * state machine but also the frontend directory has
@@ -224,7 +224,7 @@ retry_transaction:
 
     if (bents) {
         if (!libxl_only) {
-            xs_rm(ctx->xsh, t, backend_path);
+            //TODO xs_rm(ctx->xsh, t, backend_path);
             xs_mkdir(ctx->xsh, t, backend_path);
             xs_set_permissions(ctx->xsh, t, backend_path, backend_perms,
                                ARRAY_SIZE(backend_perms));

@@ -768,13 +768,13 @@ int libxl__domain_make(libxl__gc *gc, libxl_domain_config *d_config,
 retry_transaction:
     t = xs_transaction_start(ctx->xsh);
 
-    xs_rm(ctx->xsh, t, dom_path);
+    //TODO xs_rm(ctx->xsh, t, dom_path);
     libxl__xs_mknod(gc, t, dom_path, roperm, ARRAY_SIZE(roperm));
 
-    xs_rm(ctx->xsh, t, vm_path);
+    //TODO xs_rm(ctx->xsh, t, vm_path);
     libxl__xs_mknod(gc, t, vm_path, roperm, ARRAY_SIZE(roperm));
 
-    xs_rm(ctx->xsh, t, libxl_path);
+    //TODO xs_rm(ctx->xsh, t, libxl_path);
     libxl__xs_mknod(gc, t, libxl_path, noperm, ARRAY_SIZE(noperm));
     libxl__xs_mknod(gc, t, GCSPRINTF("%s/device", libxl_path),
                     noperm, ARRAY_SIZE(noperm));
