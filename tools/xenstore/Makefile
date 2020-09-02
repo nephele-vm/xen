@@ -32,6 +32,17 @@ XENSTORED_OBJS_$(CONFIG_NetBSD) = xenstored_posix.o
 XENSTORED_OBJS_$(CONFIG_FreeBSD) = xenstored_posix.o
 XENSTORED_OBJS_$(CONFIG_MiniOS) = xenstored_minios.o
 
+PROFILING_DIR=$(CURDIR)/../profiling
+CFLAGS_LIBXL += -I$(PROFILING_DIR)
+ifeq ($(CONFIG_XENSTORED_INSTRUMENT_FUNCTIONS),y)
+XENSTORED_CFLAGS += -finstrument-functions
+XENSTORED_CFLAGS += -DLIB_PROFILING=1
+XENSTORED_CFLAGS += -DPROFILE_TRIGGER_INIT_VALUE=1
+XENSTORED_CFLAGS += -DINSTRUMENTED_LIB_PATH=\"/root/dist/xen/sbin/xenstored\"
+XENSTORED_OBJS += $(PROFILING_DIR)/trace_func.o
+XENSTORED_OBJS += $(PROFILING_DIR)/trace_func_hash.o
+endif
+
 XENSTORED_OBJS += $(XENSTORED_OBJS_y)
 LDLIBS_xenstored += -lrt
 
@@ -67,7 +78,7 @@ $(XENSTORED_OBJS): CFLAGS += $(SYSTEMD_CFLAGS)
 xenstored: LDFLAGS += $(SYSTEMD_LIBS)
 endif
 
-$(XENSTORED_OBJS): CFLAGS += $(CFLAGS_libxengnttab)
+$(XENSTORED_OBJS): CFLAGS += $(CFLAGS_libxengnttab) $(XENSTORED_CFLAGS)
 
 xenstored: $(XENSTORED_OBJS)
 	$(CC) $^ $(LDFLAGS) $(LDLIBS_libxenevtchn) $(LDLIBS_libxengnttab) $(LDLIBS_libxenctrl) $(LDLIBS_xenstored) $(SOCKET_LIBS) -o $@ $(APPEND_LDFLAGS)
