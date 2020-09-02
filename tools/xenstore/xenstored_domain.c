@@ -355,10 +355,15 @@ static struct domain *alloc_domain(const void *context, unsigned int domid)
 	return domain;
 }
 
+bool no_domain_search_on_introduce = false;
+
 static struct domain *find_or_alloc_domain(const void *ctx, unsigned int domid)
 {
 	struct domain *domain;
 
+	if (no_domain_search_on_introduce)
+		domain = NULL;
+	else
 	domain = find_domain_struct(domid);
 	return domain ? : alloc_domain(ctx, domid);
 }

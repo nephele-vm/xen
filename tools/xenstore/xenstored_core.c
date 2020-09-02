@@ -2188,6 +2188,8 @@ int dom0_domid = 0;
 int dom0_event = 0;
 int priv_domid = 0;
 
+extern bool no_domain_search_on_introduce;
+
 int main(int argc, char *argv[])
 {
 	int opt;
@@ -2202,7 +2204,7 @@ int main(int argc, char *argv[])
 	orig_argc = argc;
 	orig_argv = argv;
 
-	while ((opt = getopt_long(argc, argv, "DE:F:HNPS:t:A:M:T:RVW:U", options,
+	while ((opt = getopt_long(argc, argv, "DE:F:HNPS:t:A:M:T:RVW:UC", options,
 				  NULL)) != -1) {
 		switch (opt) {
 		case 'D':
@@ -2266,6 +2268,9 @@ int main(int argc, char *argv[])
 			live_update = true;
 			break;
 #endif
+		case 'C':
+			no_domain_search_on_introduce = true;
+			break;
 		}
 	}
 	if (optind != argc)
