@@ -23,6 +23,7 @@ VERS_4.0 {
 		xs_transaction_start;
 		xs_transaction_end;
 		xs_introduce_domain;
+		xs_introduce_clone;
 		xs_set_target;
 		xs_resume_domain;
 		xs_release_domain;

@@ -486,11 +486,12 @@ static struct domain *introduce_domain(const void *ctx,
 int do_introduce(struct connection *conn, struct buffered_data *in)
 {
 	struct domain *domain;
-	char *vec[3];
-	unsigned int domid;
+	char *vec[4];
+	unsigned int domid, strings_num, parent_domid = 0;
 	evtchn_port_t port;
 
-	if (get_strings(in, vec, ARRAY_SIZE(vec)) < ARRAY_SIZE(vec))
+	strings_num = get_strings(in, vec, ARRAY_SIZE(vec));
+	if (strings_num < ARRAY_SIZE(vec) - 1)
 		return EINVAL;
 
 	domid = atoi(vec[0]);
@@ -501,11 +502,17 @@ int do_introduce(struct connection *conn, struct buffered_data *in)
 	if (port <= 0)
 		return EINVAL;
 
+	if (strings_num == ARRAY_SIZE(vec)) {
+	    parent_domid = atoi(vec[3]);
+	    trace("parent_domid=%d\n", parent_domid);
+	}
+
 	domain = introduce_domain(in, domid, port, false);
 	if (!domain)
 		return errno;
 
-	domain_conn_reset(domain);
+	if (!parent_domid)
+		domain_conn_reset(domain);
 
 	send_ack(conn, XS_INTRODUCE);
 

@@ -1087,14 +1087,16 @@ bool xs_transaction_end(struct xs_handle *h, xs_transaction_t t,
  * This tells the store daemon about a shared memory page and event channel
  * associated with a domain: the domain uses these to communicate.
  */
-bool xs_introduce_domain(struct xs_handle *h,
+static bool __xs_introduce_domain(struct xs_handle *h,
 			 unsigned int domid, unsigned long mfn,
-			 unsigned int eventchn)
+			 unsigned int eventchn, unsigned int parent_domid)
 {
 	char domid_str[MAX_STRLEN(domid)];
 	char mfn_str[MAX_STRLEN(mfn)];
 	char eventchn_str[MAX_STRLEN(eventchn)];
-	struct iovec iov[3];
+	char parent_domid_str[MAX_STRLEN(parent_domid)];
+	struct iovec iov[4];
+	int iov_len = 3;
 
 	snprintf(domid_str, sizeof(domid_str), "%u", domid);
 	snprintf(mfn_str, sizeof(mfn_str), "%lu", mfn);
@@ -1106,9 +1108,31 @@ bool xs_introduce_domain(struct xs_handle *h,
 	iov[1].iov_len = strlen(mfn_str) + 1;
 	iov[2].iov_base = eventchn_str;
 	iov[2].iov_len = strlen(eventchn_str) + 1;
+	if (parent_domid) {
+		snprintf(parent_domid_str, sizeof(parent_domid_str), "%u", parent_domid);
+
+		iov[3].iov_base = parent_domid_str;
+		iov[3].iov_len = strlen(parent_domid_str) + 1;
+
+		iov_len++;
+	}
 
 	return xs_bool(xs_talkv(h, XBT_NULL, XS_INTRODUCE, iov,
-				ARRAY_SIZE(iov), NULL));
+				iov_len, NULL));
+}
+
+bool xs_introduce_domain(struct xs_handle *h,
+			 unsigned int domid, unsigned long mfn,
+			 unsigned int eventchn)
+{
+	return __xs_introduce_domain(h, domid, mfn, eventchn, 0);
+}
+
+bool xs_introduce_clone(struct xs_handle *h,
+			 unsigned int domid, unsigned long mfn,
+			 unsigned int eventchn, unsigned int parent_domid)
+{
+	return __xs_introduce_domain(h, domid, mfn, eventchn, parent_domid);
 }
 
 bool xs_set_target(struct xs_handle *h,

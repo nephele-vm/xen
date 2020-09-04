@@ -228,6 +228,10 @@ bool xs_introduce_domain(struct xs_handle *h,
 			 unsigned long mfn,
                          unsigned int eventchn); 
 
+bool xs_introduce_clone(struct xs_handle *h,
+			 unsigned int domid, unsigned long mfn,
+			 unsigned int eventchn, unsigned int parent_domid);
+
 /* Set the target of a domain
  * This tells the store daemon that a domain is targetting another one, so
  * it should let it tinker with it.
