@@ -64,7 +64,7 @@
 #define needs_recalc(level, ent) _needs_recalc(level##e_get_flags(ent))
 #define valid_recalc(level, ent) (!(level##e_get_flags(ent) & _PAGE_ACCESSED))
 
-static unsigned long p2m_type_to_flags(const struct p2m_domain *p2m,
+unsigned long p2m_type_to_flags(const struct p2m_domain *p2m,
                                        p2m_type_t t,
                                        mfn_t mfn,
                                        unsigned int level)
@@ -775,7 +775,7 @@ p2m_pt_get_entry(struct p2m_domain *p2m, gfn_t gfn_,
     p2m_type_t l1t;
     bool_t recalc;
 
-    ASSERT(paging_mode_translate(p2m->domain));
+    ASSERT(paging_mode_translate(p2m->domain) || p2m->domain->arch.cloning.triggered);
 
     if ( sve )
         *sve = 1;
@@ -906,6 +906,12 @@ pod_retry_l2:
 
 pod_retry_l1:
     flags = l1e_get_flags(*l1e);
+    if ( p2m->domain->arch.cloning.triggered )
+    {
+        if ( flags & _PAGE_GUEST_KERNEL )
+            flags &= ~_PAGE_GUEST_KERNEL;
+    }
+
     l1t = p2m_flags_to_type(flags);
     if ( !(flags & _PAGE_PRESENT) && !p2m_is_paging(l1t) )
     {
