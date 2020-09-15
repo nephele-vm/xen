@@ -274,9 +274,9 @@ static void dump_domains(unsigned char key)
         printk("    refcnt=%d dying=%d pause_count=%d\n",
                atomic_read(&d->refcnt), d->is_dying,
                atomic_read(&d->pause_count));
-        printk("    nr_pages=%d xenheap_pages=%d shared_pages=%u paged_pages=%u "
+        printk("    nr_pages=%d xenheap_pages=%d shared_pages=%u cow_pages=%u paged_pages=%u "
                "dirty_cpus={%*pbl} max_pages=%u\n",
-               domain_tot_pages(d), d->xenheap_pages, atomic_read(&d->shr_pages),
+               domain_tot_pages(d), d->xenheap_pages, atomic_read(&d->shr_pages), atomic_read(&d->cow_pages),
                atomic_read(&d->paged_pages), CPUMASK_PR(d->dirty_cpumask),
                d->max_pages);
         printk("    handle=%02x%02x%02x%02x-%02x%02x-%02x%02x-"

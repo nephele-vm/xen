@@ -387,6 +387,7 @@ struct domain
     unsigned int     max_pages;         /* maximum value for domain_tot_pages() */
     unsigned int     extra_pages;       /* pages not included in domain_tot_pages() */
     atomic_t         shr_pages;         /* shared pages */
+    atomic_t         cow_pages;         /* number of copied-on-write pages    */
     atomic_t         paged_pages;       /* paged-out pages */
 
     /* Scheduling. */
