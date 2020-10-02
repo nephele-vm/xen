@@ -498,7 +498,7 @@ mfn_t __get_gfn_type_access(struct p2m_domain *p2m, unsigned long gfn_l,
     mfn_t mfn;
     gfn_t gfn = _gfn(gfn_l);
 
-    if ( !p2m || !paging_mode_translate(p2m->domain) )
+    if ( !p2m || !(paging_mode_translate(p2m->domain) || p2m->domain->arch.cloning.triggered) )
     {
 #endif
         /*
@@ -552,7 +552,7 @@ mfn_t __get_gfn_type_access(struct p2m_domain *p2m, unsigned long gfn_l,
 
 void __put_gfn(struct p2m_domain *p2m, unsigned long gfn)
 {
-    if ( !p2m || !paging_mode_translate(p2m->domain) )
+    if ( !p2m || !(paging_mode_translate(p2m->domain) || p2m->domain->arch.cloning.triggered) )
         /* Nothing to do in this case */
         return;
 
