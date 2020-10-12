@@ -1291,6 +1291,13 @@ static int meminit_pv(struct xc_dom_image *dom)
                                             extents);
             if ( rc < 0 )
                 return rc;
+            if ( rc != count )
+            {
+                xc_dom_panic(dom->xch, XC_OUT_OF_MEMORY,
+                             "%s: xc_domain_populate_physmap(count=%lu)=%d\n",
+                             __func__, count, rc);
+                return -1;
+            }
 
             /* Expand the returned mfns into the p2m array. */
             pfn = pfn_base_idx;
