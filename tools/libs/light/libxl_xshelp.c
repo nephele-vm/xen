@@ -305,6 +305,8 @@ int libxl__xs_path_cleanup(libxl__gc *gc, xs_transaction_t t,
         val = libxl__xs_read(gc, t, path);
         if (!val || strlen(val) != 0) break;
 
+        if (!strcmp(path, "/local/domain/0/backend/console")) break;
+
         if (!libxl__xs_directory(gc, t, path, &nb) || nb != 0) break;
 
         if (!xs_rm(CTX->xsh, t, path)) {
