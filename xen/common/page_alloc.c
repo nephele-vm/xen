@@ -2560,6 +2560,22 @@ static void dump_heap(unsigned char key)
     }
 }
 
+unsigned long system_pages_number(void)
+{
+    unsigned long n = 0;
+    int i, j;
+
+    for ( i = 0; i < MAX_NUMNODES; i++ )
+    {
+        if ( !avail[i] )
+            continue;
+        for ( j = 0; j < NR_ZONES; j++ )
+            n += avail[i][j];
+    }
+
+    return n;
+}
+
 static __init int register_heap_trigger(void)
 {
     register_keyhandler('H', dump_heap, "dump heap info", 1);
