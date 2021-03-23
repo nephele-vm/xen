@@ -129,7 +129,13 @@ add_to_bridge () {
     # Don't add $dev to $bridge if it's already on the bridge.
     if [ ! -e "/sys/class/net/${bridge}/brif/${dev}" ]; then
         log debug "adding $dev to bridge $bridge"
-        if which brctl >&/dev/null; then
+        local is_bond=0
+        local sys_uevent="/sys/class/net/${bridge}/uevent"
+        if [ -f ${sys_uevent} ]; then
+    	    local type=$(grep DEVTYPE ${sys_uevent} | cut -d'=' -f2)
+	    [ "${type}" = "bond" ] && is_bond=1
+        fi
+        if which brctl >&/dev/null && [ ${is_bond} -eq 0 ]; then
             brctl addif ${bridge} ${dev}
         else
             ip link set ${dev} master ${bridge}
