@@ -969,6 +969,8 @@ long arch_do_domctl(
                      ret = -EFAULT;
                 xfree(xsave_area);
            }
+           else
+                size = 0;
 
             vcpu_unpause(v);
 
