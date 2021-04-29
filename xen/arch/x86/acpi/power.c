@@ -409,6 +409,7 @@ static int acpi_get_wake_status(void)
     return val;
 }
 
+#ifdef CONFIG_TBOOT
 static void tboot_sleep(u8 sleep_state)
 {
     uint32_t shutdown_type;
@@ -453,18 +454,21 @@ static void tboot_sleep(u8 sleep_state)
 
     tboot_shutdown(shutdown_type);
 }
+#endif
 
 /* System is really put into sleep state by this stub */
 acpi_status acpi_enter_sleep_state(u8 sleep_state)
 {
     acpi_status status;
 
+#ifdef CONFIG_TBOOT
     if ( tboot_in_measured_env() )
     {
         tboot_sleep(sleep_state);
         printk(XENLOG_ERR "TBOOT failed entering s3 state\n");
         return_ACPI_STATUS(AE_ERROR);
     }
+#endif
 
     ACPI_FLUSH_CPU_CACHE();
 
