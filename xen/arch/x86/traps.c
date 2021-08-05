@@ -1199,8 +1199,20 @@ void do_invalid_op(struct cpu_user_regs *regs)
     panic("FATAL TRAP: vector = %d (invalid opcode)\n", TRAP_invalid_op);
 }
 
+int do_int3_fuzzing(struct vcpu *vcpu, struct cpu_user_regs *regs);
+int do_debug_fuzzing(struct vcpu *vcpu, struct cpu_user_regs *regs);
+
 void do_int3(struct cpu_user_regs *regs)
 {
+    struct vcpu *curr = current;
+    struct domain *d = curr->domain;
+
+    if ( d->arch.cloning.fuzzing )
+    {
+        if ( !do_int3_fuzzing(curr, regs) )
+            return;
+    }
+
     if ( debugger_trap_entry(TRAP_int3, regs) )
         return;
 
@@ -1898,6 +1910,13 @@ void do_debug(struct cpu_user_regs *regs)
 {
     unsigned long dr6;
     struct vcpu *v = current;
+    struct domain *d = v->domain;
+
+    if ( d->arch.cloning.fuzzing )
+    {
+        if ( !do_debug_fuzzing(v, regs) )
+            return;
+    }
 
     /* Stash dr6 as early as possible. */
     dr6 = read_debugreg(6);

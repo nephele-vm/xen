@@ -145,6 +145,8 @@
 #include <asm/pv/domain.h>
 #include <asm/pv/mm.h>
 #include <asm/pv/p2m.h>
+#include <asm/hvm/monitor.h>
+#include <xen/monitor.h>
 
 #ifdef CONFIG_PV
 #include "pv/mm.h"
@@ -991,7 +993,7 @@ get_page_from_l1e(
         pg_owner = real_pg_owner;
     }
 
-    if ( real_pg_owner == dom_cow && page->sharing->writable )
+    if ( real_pg_owner == dom_cow && (page->sharing->writable || pg_owner->arch.cloning.fuzzing) )
         goto skip_nonwritable_shared;
 
     /*
@@ -2195,7 +2197,7 @@ static int mod_l1_entry(l1_pgentry_t *pl1e, l1_pgentry_t nl1e,
 
         /* Translate foreign guest address. */
         if ( cmd != MMU_PT_UPDATE_NO_TRANSLATE &&
-             paging_mode_translate(pg_dom) )
+             (paging_mode_translate(pg_dom) || pg_dom->arch.cloning.fuzzing) )
         {
             p2m_type_t p2mt;
             gfn_t gfn = _gfn(l1e_get_pfn(nl1e));
@@ -2229,6 +2231,7 @@ static int mod_l1_entry(l1_pgentry_t *pl1e, l1_pgentry_t nl1e,
             nl1e = l1e_from_page(page, l1e_get_flags(nl1e));
         }
 
+        if (!pg_dom->arch.cloning.fuzzing)
         nl1e = adjust_guest_l1e(nl1e, pt_dom);
 
         /* Fast path for sufficiently-similar mappings. */
@@ -6458,6 +6461,74 @@ out:
     return rc;
 }
 
+static int rip_to_gmfn(struct domain *d, unsigned long rip, unsigned long *gmfn)
+{
+    struct page_info *gl1pg;
+    mfn_t gl1mfn;
+    l1_pgentry_t *pl1e;
+    unsigned long smfn;
+    int rc;
+
+    rc = l1e_get(rip, &pl1e, &gl1pg, &gl1mfn);
+    if ( rc )
+        goto out;
+
+    smfn = l1e_get_pfn(*pl1e);
+    *gmfn = get_gpfn_from_mfn(smfn);
+
+    l1e_put(d, pl1e, gl1pg, gl1mfn);
+
+out:
+    return rc;
+}
+
+int do_int3_fuzzing(struct vcpu *vcpu, struct cpu_user_regs *regs)
+{
+    unsigned long gmfn;
+    vm_event_request_t req = {};
+    unsigned long insn_len;
+    int rc;
+
+    rc = rip_to_gmfn(vcpu->domain, regs->rip, &gmfn);
+    if ( rc )
+        goto out;
+
+    insn_len = 1;
+    regs->rip -= insn_len;
+
+    req.reason = VM_EVENT_REASON_SOFTWARE_BREAKPOINT;
+    req.u.software_breakpoint.gfn = gmfn;
+    req.u.software_breakpoint.type = X86_EVENTTYPE_SW_EXCEPTION;
+    req.u.software_breakpoint.insn_length = insn_len;
+
+    rc = monitor_traps(vcpu, true, &req);
+    if ( rc == 1 )
+        rc = 0;
+
+out:
+    return rc;
+}
+
+int do_debug_fuzzing(struct vcpu *vcpu, struct cpu_user_regs *regs)
+{
+    unsigned long gmfn;
+    vm_event_request_t req = {};
+    int rc;
+
+    rc = rip_to_gmfn(vcpu->domain, regs->rip, &gmfn);
+    if ( rc )
+        goto out;
+
+    req.reason = VM_EVENT_REASON_SINGLESTEP;
+    req.u.singlestep.gfn = gmfn;
+
+    rc = monitor_traps(vcpu, true, &req);
+    if ( rc == 1 )
+        rc = 0;
+
+out:
+    return rc;
+}
 
 int map_cloning_notification_ring(unsigned long va, unsigned long pages_num,
         void **out_mapping)
