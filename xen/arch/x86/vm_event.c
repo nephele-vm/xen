@@ -58,6 +58,16 @@ void vm_event_cleanup_domain(struct domain *d)
     d->arch.mem_access_emulate_each_rep = 0;
 }
 
+static void pv_toggle_singlestep(struct vcpu *v)
+{
+    struct cpu_user_regs *regs = &v->arch.user_regs;
+
+    if ( regs->rflags & X86_EFLAGS_TF )
+        regs->rflags &= ~X86_EFLAGS_TF;
+    else
+        regs->rflags |= X86_EFLAGS_TF;
+}
+
 void vm_event_toggle_singlestep(struct domain *d, struct vcpu *v,
                                 vm_event_response_t *rsp)
 {
@@ -65,15 +75,20 @@ void vm_event_toggle_singlestep(struct domain *d, struct vcpu *v,
                          VM_EVENT_FLAG_FAST_SINGLESTEP)) )
         return;
 
-    if ( !is_hvm_domain(d) )
-        return;
-
     ASSERT(atomic_read(&v->vm_event_pause_count));
 
+    if ( is_hvm_domain(d) )
+    {
     if ( rsp->flags & VM_EVENT_FLAG_TOGGLE_SINGLESTEP )
         hvm_toggle_singlestep(v);
     else
         hvm_fast_singlestep(v, rsp->u.fast_singlestep.p2midx);
+    }
+    else
+    {
+        if ( rsp->flags & VM_EVENT_FLAG_TOGGLE_SINGLESTEP )
+            pv_toggle_singlestep(v);
+    }
 }
 
 void vm_event_register_write_resume(struct vcpu *v, vm_event_response_t *rsp)
@@ -194,40 +209,15 @@ static void vm_event_pack_segment_register(enum x86_segment segment,
 }
 #endif
 
-void vm_event_fill_regs(vm_event_request_t *req)
+static void vm_event_fill_regs_hvm(vm_event_request_t *req, struct vcpu *curr)
 {
-#ifdef CONFIG_HVM
-    const struct cpu_user_regs *regs = guest_cpu_user_regs();
     struct hvm_hw_cpu ctxt = {};
-    struct vcpu *curr = current;
 
     ASSERT(is_hvm_vcpu(curr));
 
     /* Architecture-specific vmcs/vmcb bits */
     hvm_funcs.save_cpu_ctxt(curr, &ctxt);
 
-    req->data.regs.x86.rax = regs->rax;
-    req->data.regs.x86.rcx = regs->rcx;
-    req->data.regs.x86.rdx = regs->rdx;
-    req->data.regs.x86.rbx = regs->rbx;
-    req->data.regs.x86.rsp = regs->rsp;
-    req->data.regs.x86.rbp = regs->rbp;
-    req->data.regs.x86.rsi = regs->rsi;
-    req->data.regs.x86.rdi = regs->rdi;
-
-    req->data.regs.x86.r8  = regs->r8;
-    req->data.regs.x86.r9  = regs->r9;
-    req->data.regs.x86.r10 = regs->r10;
-    req->data.regs.x86.r11 = regs->r11;
-    req->data.regs.x86.r12 = regs->r12;
-    req->data.regs.x86.r13 = regs->r13;
-    req->data.regs.x86.r14 = regs->r14;
-    req->data.regs.x86.r15 = regs->r15;
-
-    req->data.regs.x86.rflags = regs->rflags;
-    req->data.regs.x86.rip    = regs->rip;
-
-    req->data.regs.x86.dr7 = curr->arch.dr7;
     req->data.regs.x86.cr0 = curr->arch.hvm.guest_cr[0];
     req->data.regs.x86.cr2 = curr->arch.hvm.guest_cr[2];
     req->data.regs.x86.cr3 = curr->arch.hvm.guest_cr[3];
@@ -254,6 +244,57 @@ void vm_event_fill_regs(vm_event_request_t *req)
 
     if ( hvm_vmtrace_output_position(curr, &req->data.regs.x86.vmtrace_pos) != 1 )
         req->data.regs.x86.vmtrace_pos = ~0;
+}
+
+static int vm_event_fill_regs_pv(vm_event_request_t *req, struct vcpu *curr)
+{
+    int rc = 0;
+
+    ASSERT(is_pv_vcpu(curr));
+
+    req->data.regs.x86.cr0 = curr->arch.pv.ctrlreg[0];
+    req->data.regs.x86.cr2 = curr->arch.pv.ctrlreg[2];
+    req->data.regs.x86.cr3 = curr->arch.pv.ctrlreg[3];
+    req->data.regs.x86.cr4 = curr->arch.pv.ctrlreg[4];
+
+    req->data.regs.x86.dr6 = curr->arch.dr6;
+
+    return rc;
+}
+
+void vm_event_fill_regs(vm_event_request_t *req)
+{
+    const struct cpu_user_regs *regs = guest_cpu_user_regs();
+    struct vcpu *curr = current;
+
+    req->data.regs.x86.rax = regs->rax;
+    req->data.regs.x86.rcx = regs->rcx;
+    req->data.regs.x86.rdx = regs->rdx;
+    req->data.regs.x86.rbx = regs->rbx;
+    req->data.regs.x86.rsp = regs->rsp;
+    req->data.regs.x86.rbp = regs->rbp;
+    req->data.regs.x86.rsi = regs->rsi;
+    req->data.regs.x86.rdi = regs->rdi;
+
+    req->data.regs.x86.r8  = regs->r8;
+    req->data.regs.x86.r9  = regs->r9;
+    req->data.regs.x86.r10 = regs->r10;
+    req->data.regs.x86.r11 = regs->r11;
+    req->data.regs.x86.r12 = regs->r12;
+    req->data.regs.x86.r13 = regs->r13;
+    req->data.regs.x86.r14 = regs->r14;
+    req->data.regs.x86.r15 = regs->r15;
+
+    req->data.regs.x86.rflags = regs->rflags;
+    req->data.regs.x86.rip    = regs->rip;
+
+    req->data.regs.x86.dr7 = curr->arch.dr7;
+
+    if (is_pv_vcpu(curr))
+        vm_event_fill_regs_pv(req, curr);
+#ifdef CONFIG_HVM
+    else if (is_hvm_vcpu(curr))
+        vm_event_fill_regs_hvm(req, curr);
 #endif
 }
 

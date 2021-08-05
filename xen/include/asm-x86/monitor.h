@@ -74,13 +74,6 @@ static inline uint32_t arch_monitor_get_capabilities(struct domain *d)
 {
     uint32_t capabilities = 0;
 
-    /*
-     * At the moment only Intel and AMD HVM domains are supported. However,
-     * event delivery could be extended to PV domains.
-     */
-    if ( !is_hvm_domain(d) )
-        return capabilities;
-
     capabilities = ((1U << XEN_DOMCTL_MONITOR_EVENT_GUEST_REQUEST) |
                     (1U << XEN_DOMCTL_MONITOR_EVENT_SOFTWARE_BREAKPOINT) |
                     (1U << XEN_DOMCTL_MONITOR_EVENT_MOV_TO_MSR) |
