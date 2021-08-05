@@ -1156,6 +1156,9 @@ extern void dump_runq(unsigned char key);
 
 void arch_do_physinfo(struct xen_sysctl_physinfo *pi);
 
+void domain_set_param(const struct domain *d, uint32_t index, uint64_t value);
+uint64_t domain_get_param(const struct domain *d, uint32_t index);
+
 #endif /* __SCHED_H__ */
 
 /*

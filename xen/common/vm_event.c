@@ -45,7 +45,7 @@ static int vm_event_enable(
     xen_event_channel_notification_t notification_fn)
 {
     int rc;
-    unsigned long ring_gfn = d->arch.hvm.params[param];
+    unsigned long ring_gfn;
     struct vm_event_domain *ved;
 
     /*
@@ -54,6 +54,8 @@ static int vm_event_enable(
      */
     if ( *p_ved != NULL )
         return -EBUSY;
+
+    ring_gfn = domain_get_param(d, param);
 
     /* No chosen ring GFN?  Nothing we can do. */
     if ( ring_gfn == 0 )

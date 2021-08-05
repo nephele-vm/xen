@@ -288,6 +288,8 @@ struct pv_domain
     struct mapcache_domain mapcache;
 
     struct cpuidmasks *cpuidmasks;
+
+    uint64_t *params;
 };
 
 struct monitor_write_data {

@@ -315,4 +315,13 @@
 
 #define HVM_NR_PARAMS 39
 
+/*
+ * PV params
+ */
+
+#define PV_PARAM_START_INFO_PFN     0
+#define PV_PARAM_MONITOR_RING_PFN   1
+
+#define PV_NR_PARAMS 2
+
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

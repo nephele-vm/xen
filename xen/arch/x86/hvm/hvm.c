@@ -4128,7 +4128,8 @@ static int hvm_allow_set_param(struct domain *d,
     /* Make sure we evaluate permissions before loading data of domains. */
     block_speculation();
 
-    value = d->arch.hvm.params[index];
+    value = domain_get_param(d, index);
+
     switch ( index )
     {
     /* The following parameters should only be changed once. */
@@ -4161,6 +4162,9 @@ static int hvm_set_param(struct domain *d, uint32_t index, uint64_t value)
 
     /* Make sure we evaluate permissions before loading data of domains. */
     block_speculation();
+
+    if (is_pv_domain(d))
+        goto pv_domain;
 
     switch ( index )
     {
@@ -4315,9 +4319,10 @@ static int hvm_set_param(struct domain *d, uint32_t index, uint64_t value)
         break;
     }
 
+pv_domain:
     if ( !rc )
     {
-        d->arch.hvm.params[index] = value;
+        domain_set_param(d, index, value);
 
         HVM_DBG_LOG(DBG_LEVEL_HCALL, "set param %u = %"PRIx64,
                     index, value);
@@ -4343,9 +4348,7 @@ static int hvmop_set_param(
     if ( d == NULL )
         return -ESRCH;
 
-    rc = -EINVAL;
-    if ( is_hvm_domain(d) )
-        rc = hvm_set_param(d, a.index, a.value);
+    rc = hvm_set_param(d, a.index, a.value);
 
     rcu_unlock_domain(d);
     return rc;
@@ -4429,7 +4432,7 @@ int hvm_get_param(struct domain *d, uint32_t index, uint64_t *value)
         break;
 
     default:
-        *value = d->arch.hvm.params[index];
+        *value = domain_get_param(d, index);
         break;
     }
 
@@ -4454,7 +4457,7 @@ static int hvmop_get_param(
         return -ESRCH;
 
     rc = -EINVAL;
-    if ( is_hvm_domain(d) && !(rc = hvm_get_param(d, a.index, &a.value)) )
+    if ( !(rc = hvm_get_param(d, a.index, &a.value)) )
     {
         rc = __copy_to_guest(arg, &a, 1) ? -EFAULT : 0;
 
@@ -4464,6 +4467,45 @@ static int hvmop_get_param(
 
     rcu_unlock_domain(d);
     return rc;
+}
+
+static uint32_t params_translations[HVM_NR_PARAMS] = {
+    [HVM_PARAM_MONITOR_RING_PFN] = PV_PARAM_MONITOR_RING_PFN,
+};
+
+void domain_set_param(const struct domain *d, uint32_t index, uint64_t value)
+{
+    if ( is_hvm_domain(d) )
+        d->arch.hvm.params[index] = value;
+
+    else if ( is_pv_domain(d) )
+        d->arch.pv.params[index] = value;
+
+    else
+        ASSERT_UNREACHABLE(); /* Not HVM and not PV? */
+}
+
+uint64_t domain_get_param(const struct domain *d, uint32_t index)
+{
+    uint64_t value = 0;
+
+    if ( is_hvm_domain(d) )
+        value = d->arch.hvm.params[index];
+
+    else if ( is_pv_domain(d) )
+    {
+        /*
+         * TODO this is a hack in order to access PV params via HVM interface
+         */
+        if ( params_translations[index] )
+            index = params_translations[index];
+
+        value = d->arch.pv.params[index];
+    }
+    else
+        ASSERT_UNREACHABLE(); /* Not HVM and not PV? */
+
+    return value;
 }
 
 /*

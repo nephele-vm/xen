@@ -16,6 +16,8 @@
 #include <asm/pv/domain.h>
 #include <asm/shadow.h>
 
+#include <public/hvm/params.h>
+
 #ifdef CONFIG_PV32
 int8_t __read_mostly opt_pv32 = -1;
 #endif
@@ -347,6 +349,7 @@ void pv_domain_destroy(struct domain *d)
                               GDT_LDT_MBYTES << (20 - PAGE_SHIFT));
 
     XFREE(d->arch.pv.cpuidmasks);
+    XFREE(d->arch.pv.params);
 
     FREE_XENHEAP_PAGE(d->arch.pv.gdt_ldt_l1tab);
 }
@@ -372,6 +375,9 @@ int pv_domain_initialise(struct domain *d)
 
     if ( levelling_caps & ~LCAP_faulting &&
          (d->arch.pv.cpuidmasks = xmemdup(&cpuidmask_defaults)) == NULL )
+        goto fail;
+
+    if ( (d->arch.pv.params = xzalloc_array(uint64_t, PV_NR_PARAMS)) == NULL )
         goto fail;
 
     rc = create_perdomain_mapping(d, GDT_LDT_VIRT_START,
