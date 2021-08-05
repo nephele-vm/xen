@@ -572,6 +572,30 @@ static int alloc_p2m_list_x86_64(struct xc_dom_image *dom)
 
 /* ------------------------------------------------------------------------ */
 
+static int set_params_pv(struct xc_dom_image *dom)
+{
+    xen_pfn_t monitor_ring_pfn;
+    uint32_t domid = dom->guest_domid;
+    xc_interface *xch = dom->xch;
+    int rc = 0;
+
+    monitor_ring_pfn = xc_dom_alloc_page(dom, "monitor ring");
+    if ( monitor_ring_pfn == INVALID_PFN )
+    {
+        DOMPRINTF("Could not allocate monitor ring.");
+        rc = -1;
+        goto error_out;
+    }
+
+    xc_hvm_param_set(xch, domid, PV_PARAM_START_INFO_PFN,
+                     xc_dom_p2m(dom, dom->start_info_pfn));
+    xc_hvm_param_set(xch, domid, PV_PARAM_MONITOR_RING_PFN,
+                     xc_dom_p2m(dom, monitor_ring_pfn));
+
+error_out:
+    return rc;
+}
+
 static int alloc_magic_pages_pv(struct xc_dom_image *dom)
 {
     dom->start_info_pfn = xc_dom_alloc_page(dom, "start info");
@@ -589,6 +613,12 @@ static int alloc_magic_pages_pv(struct xc_dom_image *dom)
         return -1;
     xc_clear_domain_page(dom->xch, dom->guest_domid,
                          xc_dom_p2m(dom, dom->console_pfn));
+
+    if ( set_params_pv(dom) )
+    {
+        DOMPRINTF("Unable to set params");
+        return -1;
+    }
 
     dom->alloc_bootstack = 1;
 
