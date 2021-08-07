@@ -46,6 +46,7 @@ void *xc_vm_event_enable(xc_interface *xch, uint32_t domain_id, int param,
     uint64_t pfn;
     xen_pfn_t ring_pfn, mmap_pfn;
     unsigned int op, mode;
+    xc_dominfo_t info;
     int rc1, rc2, saved_errno;
 
     if ( !port )
@@ -128,10 +129,22 @@ void *xc_vm_event_enable(xc_interface *xch, uint32_t domain_id, int param,
         goto out;
     }
 
+    rc1 = xc_domain_getinfo(xch, domain_id, 1, &info);
+    if ( rc1 != 1 ||  info.domid != domain_id )
+    {
+        PERROR("Failed to get domain info");
+        goto out;
+    }
+
+    if ( info.hvm )
+    {
     /* Remove the ring_pfn from the guest's physmap */
     rc1 = xc_domain_decrease_reservation_exact(xch, domain_id, 1, 0, &ring_pfn);
     if ( rc1 != 0 )
         PERROR("Failed to remove ring page from guest physmap");
+    }
+    else
+        rc1 = 0;
 
  out:
     saved_errno = errno;
