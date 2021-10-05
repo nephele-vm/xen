@@ -1353,7 +1353,12 @@ void set_gpfn_from_mfn(unsigned long mfn, unsigned long pfn)
         const struct domain *d = page_get_owner(mfn_to_page(_mfn(mfn)));
 
         if ( d && (d == dom_cow) )
-            entry = SHARED_M2P_ENTRY;
+        {
+            unsigned long old_pfn = machine_to_phys_mapping[mfn];
+
+            if ( pfn != old_pfn )
+                entry = SHARED_M2P_ENTRY;
+        }
     }
 
     if ( opt_pv32 &&
