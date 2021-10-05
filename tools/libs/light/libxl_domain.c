@@ -64,6 +64,7 @@ int libxl__domain_rename(libxl__gc *gc, uint32_t domid,
         goto x_rc;
     }
 
+#if 0
     if (new_name[0]) {
         /* nonempty names must be unique */
         uint32_t domid_e;
@@ -83,6 +84,7 @@ int libxl__domain_rename(libxl__gc *gc, uint32_t domid,
             goto x_rc;
         }
     }
+#endif
 
     if (old_name) {
         got_old_name = xs_read(ctx->xsh, trans, name_path, &got_old_len);
