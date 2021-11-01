@@ -341,7 +341,18 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 
     ret = xsm_domctl(XSM_OTHER, d, op->cmd);
     if ( ret )
-        goto domctl_out_unlock_domonly;
+    {
+        /* Not allowed. We make an exception for cloning. */
+        if ( op->cmd == XEN_DOMCTL_getdomaininfo || op->cmd == XEN_DOMCTL_destroydomain )
+        {
+            if ( !d )
+                return -ESRCH;
+            if ( d->parent != current->domain )
+                goto domctl_out_unlock_domonly;
+        }
+        else
+            goto domctl_out_unlock_domonly;
+    }
 
     if ( !domctl_lock_acquire() )
     {
