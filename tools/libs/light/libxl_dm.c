@@ -1204,12 +1204,23 @@ static int libxl__build_device_model_args_new(libxl__gc *gc,
     uint64_t ram_size;
     const char *path, *chardev;
     bool is_stubdom = libxl_defbool_val(b_info->device_model_stubdomain);
+#if MY_QEMU_DEBUG
+    char *debug_env = getenv("MY_QEMU_DEBUG");
+#endif
 
     dm_args = flexarray_make(gc, 16, 1);
     dm_envs = flexarray_make(gc, 16, 1);
 
     libxl__set_qemu_env_for_xsa_180(gc, dm_envs);
 
+#if MY_QEMU_DEBUG
+    if ( debug_env && !strcmp(debug_env, "1") )
+    flexarray_vappend(dm_args, dm, "localhost:2000",
+                      libxl__domain_device_model(gc, b_info),
+                      "-xen-domid",
+                      GCSPRINTF("%d", guest_domid), NULL);
+    else
+#endif
     flexarray_vappend(dm_args, dm,
                       "-xen-domid",
                       GCSPRINTF("%d", guest_domid), NULL);
@@ -2849,6 +2860,9 @@ void libxl__spawn_local_dm(libxl__egc *egc, libxl__dm_spawn_state *dmss)
     const int domid = dmss->guest_domid;
     libxl__domain_build_state *const state = dmss->build_state;
     libxl__spawn_state *const spawn = &dmss->spawn;
+#if MY_QEMU_DEBUG
+    char *debug_env = getenv("MY_QEMU_DEBUG");
+#endif
 
     STATE_AO_GC(dmss->spawn.ao);
 
@@ -2873,6 +2887,11 @@ void libxl__spawn_local_dm(libxl__egc *egc, libxl__dm_spawn_state *dmss)
         abort();
     }
 
+#if MY_QEMU_DEBUG
+    if ( debug_env && !strcmp(debug_env, "1") )
+    dm = "/usr/bin/gdbserver";
+    else
+#endif
     dm = libxl__domain_device_model(gc, b_info);
     if (!dm) {
         rc = ERROR_FAIL;

@@ -99,7 +99,12 @@
 #define LIBXL_HOTPLUG_TIMEOUT 40
 /* QEMU may be slow to load and start due to a bug in Linux where the I/O
  * subsystem sometime produce high latency under load. */
+#define MY_QEMU_DEBUG 1
+#if MY_QEMU_DEBUG
+#define LIBXL_DEVICE_MODEL_START_TIMEOUT 6000
+#else
 #define LIBXL_DEVICE_MODEL_START_TIMEOUT 60
+#endif
 #define LIBXL_DEVICE_MODEL_SAVE_FILE XEN_LIB_DIR "/qemu-save" /* .$domid */
 #define LIBXL_DEVICE_MODEL_RESTORE_FILE XEN_LIB_DIR "/qemu-resume" /* .$domid */
 #define LIBXL_QMP_CMD_TIMEOUT 10
