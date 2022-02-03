@@ -54,6 +54,11 @@ type t =
 let create owner other acl =
 	{ owner = owner; other = other; acl = acl }
 
+let clone perm pdomid cdomid =
+	let owner = if perm.owner = pdomid then cdomid else perm.owner in
+	let acl = List.map (fun ent -> if fst ent = pdomid then (cdomid, snd ent) else ent) perm.acl in
+	{ owner = owner; other = perm.other; acl = acl }
+
 let get_other perms = perms.other
 let get_acl perms = perms.acl
 let get_owner perm = perm.owner

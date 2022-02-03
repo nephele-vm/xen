@@ -163,6 +163,11 @@ let write t perm path value =
 	else set_write_lowpath t (Store.Path.get_parent path);
 	add_wop t Xenbus.Xb.Op.Write path
 
+let clone t perm domid clone_domid op path clone_path =
+	Store.clone t.store perm op domid clone_domid path clone_path;
+	set_write_lowpath t (Store.Path.get_parent clone_path);
+	add_wop t Xenbus.Xb.Op.Clone clone_path
+
 let mkdir ?(with_watch=true) t perm path =
 	Store.mkdir t.store perm path;
 	set_write_lowpath t (Store.Path.get_parent path);

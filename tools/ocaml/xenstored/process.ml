@@ -63,7 +63,7 @@ let process_watch t cons =
 	let ops = Transaction.get_paths t |> List.rev in
 	let do_op_watch op cons =
 		let recurse, oldroot, root = match (fst op) with
-		| Xenbus.Xb.Op.Write|Xenbus.Xb.Op.Mkdir -> false, None, newroot
+		| Xenbus.Xb.Op.Write|Xenbus.Xb.Op.Mkdir|Xenbus.Xb.Op.Clone -> false, None, newroot
 		| Xenbus.Xb.Op.Rm       -> true, None, oldroot
 		| Xenbus.Xb.Op.Setperms -> false, Some oldroot, newroot
 		| _              -> raise (Failure "huh ?") in
@@ -276,6 +276,16 @@ let do_write con t _domains _cons data =
 	create_implicit_path t (Connection.get_perm con) path;
 	Transaction.write t (Connection.get_perm con) path value
 
+let do_clone con t _domains _cons data =
+	let domid, clone_domid, op, path, clone_path =
+		let conpath = Connection.get_path con in
+		match (split (Some 5) '\000' data) with
+		| domid :: clone_domid :: op :: path :: clone_path :: [] -> int_of_string domid, int_of_string clone_domid, int_of_string op, Store.Path.create path conpath, Store.Path.create clone_path conpath
+		| _ -> raise Invalid_Cmd_Args
+		in
+		create_implicit_path t (Connection.get_perm con) clone_path;
+		Transaction.clone t (Connection.get_perm con) domid clone_domid op path clone_path
+
 let do_mkdir con t _domains _cons data =
 	let path = split_one_path data con in
 	create_implicit_path t (Connection.get_perm con) path;
@@ -383,6 +393,7 @@ let function_of_type_simple_op ty =
 	| Xenbus.Xb.Op.Mkdir             -> reply_ack do_mkdir
 	| Xenbus.Xb.Op.Rm                -> reply_ack do_rm
 	| Xenbus.Xb.Op.Setperms          -> reply_ack do_setperms
+	| Xenbus.Xb.Op.Clone             -> reply_ack do_clone
 	| _                              -> reply_ack do_error
 
 let input_handle_error ~cons ~doms ~fct ~con ~t ~req =
@@ -622,6 +633,7 @@ let retain_op_in_history ty =
 	| Xenbus.Xb.Op.Write
 	| Xenbus.Xb.Op.Mkdir
 	| Xenbus.Xb.Op.Rm
+	| Xenbus.Xb.Op.Clone
 	| Xenbus.Xb.Op.Setperms          -> true
 	| Xenbus.Xb.Op.Debug
 	| Xenbus.Xb.Op.Directory

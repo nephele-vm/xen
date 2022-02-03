@@ -20,6 +20,7 @@ type operation =
   | Resume
   | Set_target
   | Reset_watches
+  | Clone
   | Invalid
 val operation_c_mapping : operation array
 val size : int

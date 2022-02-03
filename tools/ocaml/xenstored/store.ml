@@ -15,6 +15,7 @@
  * GNU Lesser General Public License for more details.
  *)
 open Stdext
+open Printf
 
 module SymbolMap = Map.Make(Symbol)
 
@@ -46,6 +47,14 @@ let set_perms node nperms = { node with perms = nperms }
 let add_child node child =
 	let children = SymbolMap.add child.name child node.children in
 	{ node with children }
+
+let add_children node child_list =
+	let rec add_children_rec n l =
+		match l with
+		| [] -> n
+		| h :: [] -> add_child n h
+		| h :: tl -> let nn = add_child n h in add_children_rec nn tl in
+	add_children_rec node child_list
 
 let exists node childname =
 	let childname = Symbol.of_string childname in
@@ -412,6 +421,114 @@ let write store perm path value =
 	store.root <- root;
 	if node_created
 	then Quota.add_entry store.quota owner
+
+(* TODO remove clone_path and level*)
+(*TODO Quota*)
+
+let skip_clone op level name =
+	if level = 1 then (
+		(* xs_clone_op_basic *)
+		if op = 1 && (name = "device" || name = "console") then
+			true
+		else
+			false
+	) else
+		false
+
+let op_is_dev op =
+	op >= 2 && op <= 4
+
+let op_to_string op =
+	match op with
+	| 2 -> "console"
+	| 3 -> "vif"
+	| 4 -> "9pfs"
+	| _ -> ""
+
+let clone_value_frontend domid clone_domid value =
+	let domidstr = Printf.sprintf "%d" domid in
+	match (String.split '/' value) with
+	| _ :: "local" :: "domain" :: domidstr :: rest_of_it -> Printf.sprintf "/local/domain/%d/%s" clone_domid (String.concat "/" rest_of_it)
+	| _ -> value
+
+let clone_value_frontend_id domid clone_domid value =
+	let domidstr = Printf.sprintf "%d" domid in
+	match value with
+	| domidstr -> Printf.sprintf "%d" clone_domid
+	| _ -> value
+
+let clone_value_backend op domid clone_domid value =
+	let opstr = op_to_string op in
+	let domidstr = Printf.sprintf "%d" domid in
+	match (String.split '/' value) with
+	| _ :: "local" :: "domain" :: backend_domidstr :: "backend" :: opstr :: domidstr :: rest_of_it -> Printf.sprintf "/local/domain/%s/backend/%s/%d/%s" backend_domidstr opstr clone_domid (String.concat "/" rest_of_it)
+	| _ -> value
+
+let do_clone_value op level domid clone_domid name value =
+	if op = 1 then
+		if level = 1 then
+			match name with
+			| "domid" -> Printf.sprintf "%d" clone_domid
+			| "name" -> Printf.sprintf "%s-child-%d" value clone_domid
+			| _ -> value
+		else
+			value
+	else
+		if op_is_dev op then
+			if level = 1 then
+				match name with
+				| "frontend"      -> clone_value_frontend domid clone_domid value
+				| "frontend-id"   -> clone_value_frontend_id domid clone_domid value
+				| "backend"       -> clone_value_backend op domid clone_domid value
+				| _ -> value
+			else
+				value
+		else
+			value
+
+let rec do_clone_node_rec store perm op domid node path clone_domid clone_name clone_path level =
+	let perms = Node.get_perms node in
+	let clone_perms = Perms.Node.clone perms domid clone_domid in
+	let clone_value = do_clone_value op level domid clone_domid clone_name (Node.get_value node) in
+	let clone_node = Node.create clone_name clone_perms clone_value in
+	(*Quota.add_entry store.quota (Node.get_owner clone_node);*)
+	let clone_cnodes_list = SymbolMap.fold (fun k cnode accu ->
+		let clevel = level + 1 in
+		let cname = Node.get_name cnode in
+		let should_skip = skip_clone op clevel cname in
+		if should_skip = true then
+			accu
+		else
+			let cpath = Path.of_path_and_name path cname in
+			let clone_cpath = Path.of_path_and_name clone_path cname in
+			let clone_cnode = do_clone_node_rec store perm op domid cnode cpath clone_domid cname clone_cpath clevel in
+			clone_cnode :: accu) node.Node.children [] in
+	Node.add_children clone_node clone_cnodes_list
+
+let clone_node_add_fields clone_node =
+	Node.add_child clone_node (Node.create "cloned" (Node.get_perms clone_node) "true")
+
+let clone store perm op domid clone_domid path clone_path =
+	let cloned_node = get_node store path in
+	match cloned_node with
+	| None -> raise Define.Doesnt_exist
+	| Some cloned_node ->
+		let cloned_pnode, existing = get_deepest_existing_node store clone_path in
+		let owner = Node.get_owner cloned_pnode in
+		if existing then
+			raise Define.Already_exist
+		else
+			Node.check_perm cloned_pnode perm Perms.WRITE;
+			let do_add_clone_node n name =
+				try
+					Node.find n name;
+					raise Define.Already_exist
+				with Not_found ->
+					Node.check_perm n perm Perms.WRITE;
+					let clone_node = do_clone_node_rec store perm op domid cloned_node path clone_domid name clone_path 0 in
+					Node.add_child n (clone_node_add_fields clone_node) in
+			store.root <- Path.apply_modify store.root clone_path do_add_clone_node;
+			Quota.add_entry store.quota owner (*TODO*)
 
 let mkdir store perm path =
 	let node, existing = get_deepest_existing_node store path in
