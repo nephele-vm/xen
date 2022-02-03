@@ -113,6 +113,18 @@ void *xs_read(struct xs_handle *h, xs_transaction_t t,
 bool xs_write(struct xs_handle *h, xs_transaction_t t,
 	      const char *path, const void *data, unsigned int len);
 
+enum xs_clone_op {
+    xs_clone_op_full,
+    xs_clone_op_basic,
+    xs_clone_op_dev_console,
+    xs_clone_op_dev_vif,
+    xs_clone_op_dev_9pfs,
+};
+
+bool xs_clone(struct xs_handle *h, xs_transaction_t t,
+          unsigned int parent_domid, unsigned int child_domid, enum xs_clone_op op,
+          const char *parent_path, const char *child_path);
+
 /* Create a new directory.
  * Returns false on failure, or success if it already exists.
  */

@@ -703,6 +703,34 @@ bool xs_write(struct xs_handle *h, xs_transaction_t t,
 				ARRAY_SIZE(iovec), NULL));
 }
 
+bool xs_clone(struct xs_handle *h, xs_transaction_t t,
+          unsigned int parent_domid, unsigned int child_domid, enum xs_clone_op op,
+          const char *parent_path, const char *child_path)
+{
+    char parent_domid_str[MAX_STRLEN(parent_domid)];
+    char child_domid_str[MAX_STRLEN(child_domid)];
+    char op_str[MAX_STRLEN(op)];
+    struct iovec iovec[5];
+
+    snprintf(parent_domid_str, sizeof(parent_domid_str), "%u", parent_domid);
+    snprintf(child_domid_str, sizeof(child_domid_str), "%u", child_domid);
+    snprintf(op_str, sizeof(op_str), "%u", op);
+
+    iovec[0].iov_base = (void *)parent_domid_str;
+    iovec[0].iov_len = strlen(parent_domid_str) + 1;
+    iovec[1].iov_base = (void *)child_domid_str;
+    iovec[1].iov_len = strlen(child_domid_str) + 1;
+    iovec[2].iov_base = (void *)op_str;
+    iovec[2].iov_len = strlen(op_str) + 1;
+    iovec[3].iov_base = (void *)parent_path;
+    iovec[3].iov_len = strlen(parent_path) + 1;
+    iovec[4].iov_base = (void *)child_path;
+    iovec[4].iov_len = strlen(child_path);
+
+    return xs_bool(xs_talkv(h, t, XS_CLONE, iovec,
+                ARRAY_SIZE(iovec), NULL));
+}
+
 /* Create a new directory.
  * Returns false on failure, or success if it already exists.
  */

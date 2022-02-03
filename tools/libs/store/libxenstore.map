@@ -38,5 +38,6 @@ VERS_4.0 {
 		xs_daemon_socket_ro;
 		xs_write_all;
 		xs_strings_to_perms;
+		xs_clone;
 	local: *; /* Do not expose anything by default */
 };
