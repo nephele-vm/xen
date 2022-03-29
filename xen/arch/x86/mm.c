@@ -993,7 +993,7 @@ get_page_from_l1e(
         pg_owner = real_pg_owner;
     }
 
-    if ( real_pg_owner == dom_cow && (page->sharing->writable || pg_owner->arch.cloning.fuzzing) )
+    if ( real_pg_owner == dom_cow && (page->sharing->writable || (pg_owner->arch.cloning.enabled && pg_owner->arch.cloning.fuzzing)) )
         goto skip_nonwritable_shared;
 
     /*
@@ -3007,11 +3007,13 @@ static int _get_page_type(struct page_info *page, unsigned long type,
             if ( ((x & PGT_type_mask) == PGT_l4_page_table) &&
                  (type == PGT_l3_page_table) )
                 return -EINVAL;
+#if 0
             gdprintk(XENLOG_WARNING,
                      "Bad type (saw %" PRtype_info " != exp %" PRtype_info ") "
                      "for mfn %" PRI_mfn " (pfn %" PRI_pfn ")\n",
                      x, type, mfn_x(page_to_mfn(page)),
                      get_gpfn_from_mfn(mfn_x(page_to_mfn(page))));
+#endif
             return -EINVAL;
         }
         else if ( unlikely(!(x & PGT_validated)) )
@@ -6422,13 +6424,19 @@ int do_cow(unsigned long va)
 
     smfn = l1e_get_pfn(*pl1e);
     gmfn = get_gpfn_from_mfn(smfn);
+    if ( gmfn == INVALID_M2P_ENTRY )
+    {
+        rc = -ESRCH;
+        goto out_l1e_put;
+    }
 
     COW_LOG("%s domid=%d addr=%lx rip=%lx",
         __FUNCTION__, d->domain_id, va, v->arch.user_regs.rip);
 
     rc = mem_sharing_unshare_page_pv(d, gmfn, smfn, false, &cmfn);
     if ( rc ) {
-        gdprintk(XENLOG_ERR, "Could not unshare gmfn=%lx\n", gmfn);
+        gdprintk(XENLOG_ERR, "Could not unshare gmfn=%lx smfn=%lx va=%lx\n",
+                gmfn, smfn, va);
         goto out_l1e_put;
     }
 
@@ -6446,7 +6454,12 @@ int do_cow(unsigned long va)
         &l1e_get_intpte(*pl1e), l1e_get_intpte(nl1e), gl1mfn);
 
     rc = p2m_fll_set_entry(d, gmfn, cmfn);
-    ASSERT(rc == 0);
+    if ( rc )
+    {
+        gdprintk(XENLOG_ERR, "Error calling p2m_fll_set_entry(%d, %lx, %lx)=%d\n",
+                d->domain_id, gmfn, cmfn, rc);
+        goto out_l1e_put;
+    }
 
     atomic_inc(&d->cow_pages);
 
