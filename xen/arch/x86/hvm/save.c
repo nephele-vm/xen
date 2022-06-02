@@ -247,8 +247,10 @@ int hvm_save(struct domain *d, hvm_domain_context_t *h)
 
             for_each_vcpu ( d, v )
             {
+#if 0
                 printk(XENLOG_G_INFO "HVM %pv save: %s\n",
                        v, hvm_sr_handlers[i].name);
+#endif
                 if ( handler(v, h) != 0 )
                 {
                     printk(XENLOG_G_ERR
@@ -261,8 +263,10 @@ int hvm_save(struct domain *d, hvm_domain_context_t *h)
         }
         else
         {
+#if 0
             printk(XENLOG_G_INFO "HVM d%d save: %s\n",
                    d->domain_id, hvm_sr_handlers[i].name);
+#endif
             if ( handler(d->vcpu[0], h) != 0 )
             {
                 printk(XENLOG_G_ERR
@@ -336,8 +340,10 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
         }
 
         /* Load the entry */
+#if 0
         printk(XENLOG_G_INFO "HVM%d restore: %s %"PRIu16"\n", d->domain_id,
                hvm_sr_handlers[desc->typecode].name, desc->instance);
+#endif
         if ( handler(d, h) != 0 )
         {
             printk(XENLOG_G_ERR "HVM%d restore: failed to load entry %u/%u\n",
