@@ -930,6 +930,66 @@ static int handle_shared_info(struct xc_sr_context *ctx,
     return rc;
 }
 
+static int handle_pv_params(struct xc_sr_context *ctx,
+                            struct xc_sr_record *rec)
+{
+    xc_interface *xch = ctx->xch;
+    struct xc_sr_rec_hvm_params *hdr = rec->data;
+    struct xc_sr_rec_hvm_params_entry *entry = hdr->param;
+    unsigned int i;
+    int rc;
+
+    if ( rec->length < sizeof(*hdr) )
+    {
+        ERROR("HVM_PARAMS record truncated: length %u, header size %zu",
+              rec->length, sizeof(*hdr));
+        return -1;
+    }
+
+    if ( rec->length != (sizeof(*hdr) + hdr->count * sizeof(*entry)) )
+    {
+        ERROR("HVM_PARAMS record truncated: header %zu, count %u, "
+              "expected len %zu, got %u",
+              sizeof(*hdr), hdr->count, hdr->count * sizeof(*entry),
+              rec->length);
+        return -1;
+    }
+
+    /*
+     * Tolerate empty records.  Older sending sides used to accidentally
+     * generate them.
+     */
+    if ( hdr->count == 0 )
+    {
+        DBGPRINTF("Skipping empty HVM_PARAMS record\n");
+        return 0;
+    }
+
+    for ( i = 0; i < hdr->count; i++, entry++ )
+    {
+        switch ( entry->index )
+        {
+        case PV_PARAM_START_INFO_PFN:
+        case PV_PARAM_MONITOR_RING_PFN:
+            xc_clear_domain_page(xch, ctx->domid, entry->value);
+            break;
+        default:
+            PERROR("Invalid HVM param index=%lu", entry->index);
+            return -1;
+        }
+
+        rc = xc_hvm_param_set(xch, ctx->domid, entry->index, pfn_to_mfn(ctx, entry->value));
+        if ( rc < 0 )
+        {
+            PERROR("set HVM param %"PRId64" = 0x%016"PRIx64,
+                   entry->index, entry->value);
+            return rc;
+        }
+    }
+
+    return 0;
+}
+
 /* restore_ops function. */
 static bool x86_pv_pfn_is_valid(const struct xc_sr_context *ctx, xen_pfn_t pfn)
 {
@@ -1107,6 +1167,9 @@ static int x86_pv_process_record(struct xc_sr_context *ctx,
 
     case REC_TYPE_X86_MSR_POLICY:
         return handle_x86_msr_policy(ctx, rec);
+
+    case REC_TYPE_PV_PARAMS:
+        return handle_pv_params(ctx, rec);
 
     default:
         return RECORD_NOT_PROCESSED;

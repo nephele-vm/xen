@@ -863,6 +863,58 @@ static int write_shared_info(struct xc_sr_context *ctx)
     return write_record(ctx, &rec);
 }
 
+static int write_pv_params(struct xc_sr_context *ctx)
+{
+    static const unsigned int params[] = {
+        PV_PARAM_START_INFO_PFN,
+        PV_PARAM_MONITOR_RING_PFN,
+    };
+
+    xc_interface *xch = ctx->xch;
+    struct xc_sr_rec_hvm_params_entry entries[ARRAY_SIZE(params)];
+    struct xc_sr_rec_hvm_params hdr = {
+        .count = 0,
+    };
+    struct xc_sr_record rec = {
+        .type   = REC_TYPE_PV_PARAMS,
+        .length = sizeof(hdr),
+        .data   = &hdr,
+    };
+    unsigned int i;
+    int rc;
+
+    for ( i = 0; i < ARRAY_SIZE(params); i++ )
+    {
+        uint32_t index = params[i];
+        uint64_t value;
+
+        rc = xc_hvm_param_get(xch, ctx->domid, index, &value);
+        if ( rc )
+        {
+            PERROR("Failed to get HVMPARAM at index %u", index);
+            return rc;
+        }
+        value = mfn_to_pfn(ctx, value);
+
+        if ( value != 0 )
+        {
+            entries[hdr.count].index = index;
+            entries[hdr.count].value = value;
+            hdr.count++;
+        }
+    }
+
+    /* No params? Skip this record. */
+    if ( hdr.count == 0 )
+        return 0;
+
+    rc = write_split_record(ctx, &rec, entries, hdr.count * sizeof(*entries));
+    if ( rc )
+        PERROR("Failed to write HVM_PARAMS record");
+
+    return rc;
+}
+
 /*
  * Normalise a pagetable for the migration stream.  Performs mfn->pfn
  * conversions on the ptes.
@@ -1102,6 +1154,10 @@ static int x86_pv_end_of_checkpoint(struct xc_sr_context *ctx)
         return rc;
 
     rc = write_all_vcpu_information(ctx);
+    if ( rc )
+        return rc;
+
+    rc = write_pv_params(ctx);
     if ( rc )
         return rc;
 
