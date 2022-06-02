@@ -536,6 +536,16 @@ struct domain
 #ifdef CONFIG_MEM_SHARING
     struct vm_event_domain *vm_event_share;
     struct domain *parent; /* VM fork parent */
+//#define CONFIG_MEMSHR_STATS 1
+#if CONFIG_MEMSHR_STATS
+    struct {
+        struct {
+            unsigned long iteration_num;
+            unsigned long sum_duration_usec;
+            unsigned long sum_reset_pages;
+        } fuzz;
+    } memshr_stats;
+#endif
 #endif
     /* Memory paging support */
 #ifdef CONFIG_MEM_PAGING
