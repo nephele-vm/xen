@@ -195,6 +195,28 @@ int main_memory_last(int argc, char **argv)
     return ret;
 }
 
+
+int main_clone(int argc, char **argv)
+{
+    int opt;
+    uint32_t domid, batch_size = 1;
+    static struct option opts[] = {
+        {"batch", 1, 0, 'b'},
+        COMMON_LONG_OPTS
+    };
+
+    SWITCH_FOREACH_OPT(opt, "b:", opts, "main_clone", 0) {
+    case 'b':
+        batch_size = atoi(optarg);
+        break;
+    }
+
+    domid = find_domain(argv[optind]);
+
+    return libxl_domain_clone_batch(ctx, domid, batch_size, NULL);
+}
+
+
 /*
  * Local variables:
  * mode: C

@@ -632,19 +632,17 @@ const struct cmd_spec cmd_table[] = {
     },
     { "memory",
       &main_memory, 0, 1,
-      "Terminate a domain immediately",
+      "Dump memory of a domain",
       "[options] <Domain>\n",
-      "-f                      Permit destroying domain 0, which will only succeed\n"
-      "                        when run from disaggregated toolstack domain with a\n"
-      "                        hardware domain distinct from domain 0."
     },
     { "memory-last",
       &main_memory_last, 0, 1,
-      "Terminate a domain immediately",
+      "Dump memory of last domain",
+    },
+    { "clone",
+      &main_clone, 0, 1,
+      "Clone a domain",
       "[options] <Domain>\n",
-      "-f                      Permit destroying domain 0, which will only succeed\n"
-      "                        when run from disaggregated toolstack domain with a\n"
-      "                        hardware domain distinct from domain 0."
     },
 };
 

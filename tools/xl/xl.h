@@ -118,6 +118,7 @@ int main_info(int argc, char **argv);
 int main_sharing(int argc, char **argv);
 int main_memory(int argc, char **argv);
 int main_memory_last(int argc, char **argv);
+int main_clone(int argc, char **argv);
 int main_cd_eject(int argc, char **argv);
 int main_cd_insert(int argc, char **argv);
 int main_console(int argc, char **argv);
