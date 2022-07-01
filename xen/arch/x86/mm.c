@@ -6047,6 +6047,9 @@ void destroy_perdomain_mapping(struct domain *d, unsigned long va,
 
         while ( nr )
         {
+            if ( mfn_x(l2e_get_mfn(*pl2e)) == 0 )
+                *((l2_pgentry_t *) pl2e) = l2e_empty();
+
             if ( l2e_get_flags(*pl2e) & _PAGE_PRESENT )
             {
                 l1_pgentry_t *l1tab = map_l1t_from_l2e(*pl2e);
@@ -6095,9 +6098,18 @@ void free_perdomain_mappings(struct domain *d)
             unsigned int j;
 
             for ( j = 0; j < L2_PAGETABLE_ENTRIES; ++j )
+            {
                 if ( l2e_get_flags(l2tab[j]) & _PAGE_PRESENT )
                 {
-                    struct page_info *l1pg = l2e_get_page(l2tab[j]);
+                    struct page_info *l1pg;
+
+                    if ( mfn_x(l2e_get_mfn(l2tab[j])) == 0 )
+                    {
+                        l2tab[j] = l2e_empty();
+                        continue;
+                    }
+
+                    l1pg = l2e_get_page(l2tab[j]);
 
                     if ( l2e_get_flags(l2tab[j]) & _PAGE_AVAIL0 )
                     {
@@ -6118,6 +6130,7 @@ void free_perdomain_mappings(struct domain *d)
                     else
                         free_domheap_page(l1pg);
                 }
+            }
 
             unmap_domain_page(l2tab);
             free_domheap_page(l2pg);
