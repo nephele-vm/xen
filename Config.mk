@@ -233,13 +233,13 @@ endif
 
 ifeq ($(GIT_HTTP),y)
 OVMF_UPSTREAM_URL ?= http://xenbits.xen.org/git-http/ovmf.git
-QEMU_UPSTREAM_URL ?= http://xenbits.xen.org/git-http/qemu-xen.git
+QEMU_UPSTREAM_URL ?= https://github.com/nephele-vm/qemu-xen.git
 QEMU_TRADITIONAL_URL ?= http://xenbits.xen.org/git-http/qemu-xen-traditional.git
 SEABIOS_UPSTREAM_URL ?= http://xenbits.xen.org/git-http/seabios.git
 MINIOS_UPSTREAM_URL ?= http://xenbits.xen.org/git-http/mini-os.git
 else
 OVMF_UPSTREAM_URL ?= git://xenbits.xen.org/ovmf.git
-QEMU_UPSTREAM_URL ?= ssh://git@repos.ant-net/clupu/qemu-xen.clone.git
+QEMU_UPSTREAM_URL ?= git://github.com:nephele-vm/qemu-xen.git
 QEMU_TRADITIONAL_URL ?= git://xenbits.xen.org/qemu-xen-traditional.git
 SEABIOS_UPSTREAM_URL ?= git://xenbits.xen.org/seabios.git
 MINIOS_UPSTREAM_URL ?= git://xenbits.xen.org/mini-os.git
