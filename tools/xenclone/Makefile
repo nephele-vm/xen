@@ -39,7 +39,10 @@ OVS_SRC=/home/wolf/nfv/dev/UPSTREAM/ovs.git
 APPEND_LDFLAGS+=-L$(OVS_SRC)/utilities/.libs/
 APPEND_LDFLAGS+=-L$(OVS_SRC)/dist/ovs/lib
 else
-OVS_SRC=/root/dev/ovs
+#OVS_SRC=/root/dev/ovs
+ifndef OVS_SRC
+$(error OVS_SRC is undefined)
+endif
 APPEND_LDFLAGS+=-L/root/dist/ovs/lib
 endif
 CFLAGS += -I$(OVS_SRC)/include
